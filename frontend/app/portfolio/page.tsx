@@ -1,281 +1,253 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
+import { Briefcase, TrendingUp, Plus, Trash2, DollarSign, AlertTriangle } from "lucide-react";
 import { MetricCard } from "@/components/metric-card";
 import { Button } from "@/components/ui/button";
-import { motion } from "framer-motion";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
-  AlertTriangle,
-  Briefcase,
-  PieChart as PieChartIcon,
-  Target,
-  TrendingUp,
-} from "lucide-react";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  Cell,
-  Legend,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-
-const allocationData = [
-  { name: "股票基金", value: 45, color: "#171717" },
-  { name: "债券基金", value: 30, color: "#0071e3" },
-  { name: "货币基金", value: 15, color: "#6e6e73" },
-  { name: "黄金 / 商品", value: 10, color: "#d1d1d6" },
-];
-
-const returnData = [
-  { date: "1月", portfolio: 1.0, benchmark: 1.0 },
-  { date: "2月", portfolio: 1.02, benchmark: 1.015 },
-  { date: "3月", portfolio: 0.99, benchmark: 1.0 },
-  { date: "4月", portfolio: 1.06, benchmark: 1.03 },
-  { date: "5月", portfolio: 1.08, benchmark: 1.045 },
-  { date: "6月", portfolio: 1.12, benchmark: 1.055 },
-  { date: "7月", portfolio: 1.15, benchmark: 1.06 },
-  { date: "8月", portfolio: 1.13, benchmark: 1.055 },
-  { date: "9月", portfolio: 1.18, benchmark: 1.07 },
-  { date: "10月", portfolio: 1.21, benchmark: 1.075 },
-  { date: "11月", portfolio: 1.19, benchmark: 1.07 },
-  { date: "12月", portfolio: 1.24, benchmark: 1.08 },
-];
+  HoldingItem,
+  HoldingCreate,
+  RealPortfolioSummary,
+  getRealPortfolio,
+  createHolding,
+  sellHolding,
+  deleteHolding,
+  searchFunds,
+} from "@/services/fund";
 
 export default function PortfolioPage() {
+  const [portfolio, setPortfolio] = useState<RealPortfolioSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+
+  // Form state
+  const [query, setQuery] = useState("");
+  const [suggestions, setSuggestions] = useState<{ code: string; name: string }[]>([]);
+  const [form, setForm] = useState<HoldingCreate>({
+    fund_code: "", fund_name: "", fund_type: "",
+    buy_date: "", buy_amount: 0, buy_nav: 0, shares: 0, fee: 0, notes: "",
+  });
+  const [submitting, setSubmitting] = useState(false);
+
+  const fetchPortfolio = () => {
+    getRealPortfolio().then(setPortfolio).finally(() => setLoading(false));
+  };
+
+  useEffect(() => { fetchPortfolio(); }, []);
+
+  // Search suggestions
+  useEffect(() => {
+    if (!query.trim()) { setSuggestions([]); return; }
+    const t = setTimeout(() => searchFunds(query).then(r => setSuggestions(r.slice(0, 5))), 250);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const handleAdd = async () => {
+    if (!form.fund_code || !form.buy_date || form.buy_amount <= 0) return;
+    setSubmitting(true);
+    try {
+      await createHolding(form);
+      setShowForm(false);
+      setForm({ fund_code: "", fund_name: "", fund_type: "", buy_date: "", buy_amount: 0, buy_nav: 0, shares: 0, fee: 0, notes: "" });
+      setQuery("");
+      fetchPortfolio();
+    } catch (err) { console.error(err); }
+    finally { setSubmitting(false); }
+  };
+
+  const handleSell = async (id: number) => {
+    const date = prompt("卖出日期 (YYYY-MM-DD):");
+    if (!date) return;
+    const amount = prompt("卖出金额:");
+    if (!amount) return;
+    const nav = prompt("卖出净值:");
+    if (!nav) return;
+    try {
+      await sellHolding(id, { sell_date: date, sell_amount: +amount, sell_nav: +nav });
+      fetchPortfolio();
+    } catch (err) { console.error(err); }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("确认删除此持仓记录？")) return;
+    try {
+      await deleteHolding(id);
+      fetchPortfolio();
+    } catch (err) { console.error(err); }
+  };
+
+  if (loading) return <div className="mx-auto max-w-6xl px-6 py-20 text-center text-muted-foreground">加载中…</div>;
+
+  const isUp = (portfolio?.total_profit ?? 0) >= 0;
+
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
+    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
       {/* Header */}
-      <section className="mb-12">
-        <motion.h1
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
+      <section className="mb-8">
+        <motion.h1 initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
-          className="text-3xl font-semibold tracking-tight sm:text-4xl"
-        >
-          投资组合
+          className="text-3xl font-semibold tracking-tight sm:text-4xl">
+          我的持仓
         </motion.h1>
-        <motion.p
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
+        <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.05, ease: [0.23, 1, 0.32, 1] }}
-          className="mt-3 max-w-2xl text-lg text-muted-foreground"
-        >
-          基于风险承受力，生成并跟踪一个简单、透明的资产配置方案。
+          className="mt-2 text-muted-foreground">
+          手动录入真实交易，实时计算持仓盈亏
         </motion.p>
       </section>
 
-      {/* Metrics */}
-      <div className="mb-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          title="组合总市值"
-          value="¥128,420"
-          subtitle="示例账户"
-          icon={Briefcase}
-          delay={0.1}
-        />
-        <MetricCard
-          title="累计收益"
-          value="¥14,420"
-          trend="up"
-          trendValue="+12.6%"
-          subtitle="成立以来"
-          icon={TrendingUp}
-          delay={0.15}
-        />
-        <MetricCard
-          title="目标年化"
-          value="7.0%"
-          trend="neutral"
-          subtitle="稳健增长型"
-          icon={Target}
-          delay={0.2}
-        />
-        <MetricCard
-          title="风险等级"
-          value="中等"
-          trend="neutral"
-          subtitle="建议持有 ≥3 年"
-          icon={AlertTriangle}
-          delay={0.25}
-        />
+      {/* Summary cards */}
+      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricCard title="持仓市值" value={`¥${(portfolio?.total_value ?? 0).toLocaleString()}`}
+          icon={Briefcase} delay={0.1} />
+        <MetricCard title="累计成本" value={`¥${(portfolio?.total_cost ?? 0).toLocaleString()}`}
+          icon={DollarSign} delay={0.15} />
+        <MetricCard title="浮动盈亏" value={`¥${(portfolio?.total_profit ?? 0).toLocaleString()}`}
+          trend={isUp ? "up" : "down"}
+          trendValue={`${isUp ? "+" : ""}${(portfolio?.total_profit_pct ?? 0).toFixed(2)}%`}
+          icon={TrendingUp} delay={0.2} />
+        <MetricCard title="持仓数量" value={`${portfolio?.holding_count ?? 0} 只`}
+          icon={AlertTriangle} delay={0.25} />
       </div>
 
-      {/* Charts Grid */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Allocation */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.3, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-3xl border border-border bg-background p-6 sm:p-8"
-        >
-          <div className="mb-4">
-            <h3 className="text-lg font-semibold tracking-tight">
-              资产配置
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              按资产类别划分的当前仓位
-            </p>
-          </div>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={allocationData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={70}
-                  outerRadius={110}
-                  paddingAngle={3}
-                  dataKey="value"
-                  strokeWidth={0}
-                >
-                  {allocationData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--background)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "12px",
-                    boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
-                  }}
-                  itemStyle={{ color: "var(--foreground)", fontSize: 13 }}
-                  formatter={(value, name) => [`${value}%`, name]}
-                />
-                <Legend
-                  verticalAlign="bottom"
-                  height={36}
-                  iconType="circle"
-                  formatter={(value: string) => (
-                    <span className="text-sm text-muted-foreground">{value}</span>
-                  )}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            {allocationData.map((item) => (
-              <div
-                key={item.name}
-                className="flex items-center justify-between rounded-xl border border-border p-3"
-              >
-                <div className="flex items-center gap-2">
-                  <span
-                    className="h-2.5 w-2.5 rounded-full"
-                    style={{ backgroundColor: item.color }}
-                  />
-                  <span className="text-sm">{item.name}</span>
-                </div>
-                <span className="text-sm font-medium">{item.value}%</span>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-
-        {/* Performance */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.35, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-3xl border border-border bg-background p-6 sm:p-8"
-        >
-          <div className="mb-4">
-            <h3 className="text-lg font-semibold tracking-tight">
-              组合 vs 基准
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              与沪深300指数走势对比
-            </p>
-          </div>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={returnData} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
-                <defs>
-                  <linearGradient id="colorPortfolio" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#171717" stopOpacity={0.12} />
-                    <stop offset="95%" stopColor="#171717" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="colorBenchmark" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#0071e3" stopOpacity={0.12} />
-                    <stop offset="95%" stopColor="#0071e3" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                <XAxis
-                  dataKey="date"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
-                  dy={8}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
-                  domain={[0.95, 1.28]}
-                  tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--background)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "12px",
-                    boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
-                  }}
-                  itemStyle={{ color: "var(--foreground)", fontSize: 13 }}
-                  formatter={(value, name) => [
-                    `${(typeof value === "number" ? value * 100 : 0).toFixed(2)}%`,
-                    name === "portfolio" ? "我的组合" : "沪深300",
-                  ]}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="portfolio"
-                  stroke="#171717"
-                  strokeWidth={2}
-                  fill="url(#colorPortfolio)"
-                  dot={false}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="benchmark"
-                  stroke="#0071e3"
-                  strokeWidth={2}
-                  strokeDasharray="4 4"
-                  fill="url(#colorBenchmark)"
-                  dot={false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </motion.div>
-      </div>
-
-      {/* Action */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.45, ease: [0.23, 1, 0.32, 1] }}
-        className="mt-8 flex flex-col items-start justify-between gap-4 rounded-3xl border border-border bg-muted/40 p-6 sm:flex-row sm:items-center sm:p-8"
-      >
-        <div>
-          <h4 className="text-lg font-semibold">想要一份新的配置方案？</h4>
-          <p className="mt-1 text-sm text-muted-foreground">
-            回答几个简单问题，我们会根据你的目标和风险偏好重新建议。
-          </p>
-        </div>
-        <Button className="h-12 rounded-2xl bg-foreground px-6 text-base font-medium text-background hover:bg-foreground/90">
-          <PieChartIcon className="mr-2 h-4 w-4" />
-          重新评估
+      {/* Add button */}
+      <div className="mb-6 flex items-center justify-between">
+        <h2 className="text-lg font-semibold">持仓明细</h2>
+        <Button onClick={() => setShowForm(!showForm)} className="h-10 rounded-xl gap-2">
+          <Plus className="h-4 w-4" /> {showForm ? "取消" : "新增持仓"}
         </Button>
-      </motion.div>
+      </div>
+
+      {/* Add form */}
+      {showForm && (
+        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
+          className="mb-6 overflow-hidden rounded-2xl border border-border bg-background p-5">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Fund search */}
+            <div className="relative sm:col-span-2">
+              <label className="text-xs text-muted-foreground">基金代码/名称</label>
+              <Input value={query} onChange={e => { setQuery(e.target.value); setForm(f => ({ ...f, fund_code: "" })); }}
+                placeholder="搜索基金..." className="mt-1 h-10 rounded-xl" />
+              {suggestions.length > 0 && (
+                <div className="absolute z-10 mt-1 w-full rounded-xl border border-border bg-background p-1 shadow-lg">
+                  {suggestions.map(s => (
+                    <button key={s.code} onClick={() => {
+                      setForm(f => ({ ...f, fund_code: s.code, fund_name: s.name }));
+                      setQuery(s.name);
+                      setSuggestions([]);
+                    }} className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted">
+                      <span className="font-medium">{s.name}</span>
+                      <span className="ml-2 text-muted-foreground">{s.code}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">买入日期</label>
+              <Input type="date" value={form.buy_date} onChange={e => setForm(f => ({ ...f, buy_date: e.target.value }))}
+                className="mt-1 h-10 rounded-xl" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">买入金额 (¥)</label>
+              <Input type="number" step="0.01" value={form.buy_amount || ""} onChange={e => setForm(f => ({ ...f, buy_amount: +e.target.value }))}
+                placeholder="0.00" className="mt-1 h-10 rounded-xl" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">买入净值</label>
+              <Input type="number" step="0.0001" value={form.buy_nav || ""} onChange={e => setForm(f => ({ ...f, buy_nav: +e.target.value }))}
+                placeholder="1.0000" className="mt-1 h-10 rounded-xl" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">买入份额</label>
+              <Input type="number" step="0.01" value={form.shares || ""} onChange={e => setForm(f => ({ ...f, shares: +e.target.value }))}
+                placeholder="0.00" className="mt-1 h-10 rounded-xl" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">手续费</label>
+              <Input type="number" step="0.01" value={form.fee || ""} onChange={e => setForm(f => ({ ...f, fee: +e.target.value }))}
+                placeholder="0.00" className="mt-1 h-10 rounded-xl" />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-xs text-muted-foreground">备注</label>
+              <Input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                placeholder="可选" className="mt-1 h-10 rounded-xl" />
+            </div>
+          </div>
+          <Button onClick={handleAdd} disabled={submitting}
+            className="mt-4 h-10 rounded-xl bg-foreground px-6 text-background hover:bg-foreground/90">
+            {submitting ? "提交中…" : "确认添加"}
+          </Button>
+        </motion.div>
+      )}
+
+      {/* Holdings table */}
+      {!portfolio?.holdings.length ? (
+        <div className="rounded-2xl border border-border bg-background py-16 text-center text-muted-foreground">
+          暂无持仓。点击"新增持仓"添加真实交易记录。
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-2xl border border-border bg-background">
+          <table className="w-full text-sm">
+            <thead className="border-b border-border bg-muted/40 text-left">
+              <tr>
+                <th className="px-4 py-3 font-medium">基金</th>
+                <th className="px-4 py-3 font-medium">买入日期</th>
+                <th className="px-4 py-3 font-medium text-right">成本</th>
+                <th className="px-4 py-3 font-medium text-right">份额</th>
+                <th className="px-4 py-3 font-medium text-right">当前净值</th>
+                <th className="px-4 py-3 font-medium text-right">市值</th>
+                <th className="px-4 py-3 font-medium text-right">盈亏</th>
+                <th className="px-4 py-3 font-medium text-center">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {portfolio.holdings.map((h, i) => (
+                <motion.tr key={h.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.02 * i }} className="border-b border-border last:border-0 hover:bg-muted/20">
+                  <td className="px-4 py-3">
+                    <div className="font-medium">{h.fund_name}</div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {h.fund_code}
+                      {h.fund_type && <Badge variant="outline" className="text-[10px]">{h.fund_type}</Badge>}
+                      {h.is_sold && <Badge variant="default" className="text-[10px]">已卖出</Badge>}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">{h.buy_date}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">¥{h.cost?.toLocaleString() ?? "-"}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">{h.shares.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">{h.current_nav?.toFixed(4) ?? "-"}</td>
+                  <td className="px-4 py-3 text-right tabular-nums font-medium">
+                    ¥{h.current_value?.toLocaleString() ?? "-"}
+                  </td>
+                  <td className={`px-4 py-3 text-right tabular-nums font-medium ${(h.profit ?? 0) >= 0 ? "text-positive" : "text-negative"}`}>
+                    {h.profit != null ? (
+                      <>{h.profit >= 0 ? "+" : ""}¥{h.profit.toLocaleString()}<br />
+                        <span className="text-xs">({h.profit >= 0 ? "+" : ""}{h.profit_pct?.toFixed(2)}%)</span>
+                      </>
+                    ) : "-"}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      {!h.is_sold && (
+                        <Button variant="outline" size="sm" onClick={() => handleSell(h.id)}
+                          className="h-7 rounded-lg text-xs">卖出</Button>
+                      )}
+                      <Button variant="outline" size="sm" onClick={() => handleDelete(h.id)}
+                        className="h-7 rounded-lg text-xs text-negative">
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </td>
+                </motion.tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

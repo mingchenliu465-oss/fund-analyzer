@@ -78,61 +78,73 @@ export default function ReviewPage() {
     <div className="mx-auto max-w-6xl px-6 py-10">
       {/* Header */}
       <section className="mb-12">
-        <motion.h1
+        <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
-          className="text-3xl font-semibold tracking-tight sm:text-4xl"
+          className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
         >
-          投资复盘
-        </motion.h1>
-        <motion.p
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.05, ease: [0.23, 1, 0.32, 1] }}
-          className="mt-3 max-w-2xl text-lg text-muted-foreground"
-        >
-          回顾过去一年的投资表现，识别收益来源与改进空间。
-        </motion.p>
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+              投资复盘
+            </h1>
+            <p className="mt-3 max-w-2xl text-lg text-muted-foreground">
+              回顾过去一年的投资表现，识别收益来源与改进空间。
+            </p>
+          </div>
+          <span className="inline-flex w-fit items-center rounded-full border border-warning/30 bg-warning/10 px-3 py-1 text-sm font-medium text-warning">
+            模拟数据 · 仅供演示
+          </span>
+        </motion.div>
       </section>
 
       {/* Metrics */}
       <div className="mb-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
-          title="年度收益"
+          title="年度收益（模拟）"
           value="+21.7%"
           trend="up"
-          trendValue="+3.2%"
-          subtitle="跑赢基准"
+          trendValue="示例"
+          subtitle="非真实账户"
           icon={TrendingUp}
           delay={0.1}
         />
         <MetricCard
-          title="最大单笔亏损"
+          title="最大单笔亏损（模拟）"
           value="-8.4%"
           trend="down"
-          trendValue="8 月回撤"
-          subtitle="发生在 8 月"
+          trendValue="示例"
+          subtitle="非真实账户"
           icon={ArrowDownRight}
           delay={0.15}
         />
         <MetricCard
-          title="胜率"
+          title="胜率（模拟）"
           value="62%"
           trend="neutral"
-          subtitle="盈利月份占比"
+          subtitle="示例统计"
           icon={Target}
           delay={0.2}
         />
         <MetricCard
-          title="交易次数"
+          title="交易次数（模拟）"
           value="18 笔"
           trend="neutral"
-          subtitle="今年共操作"
+          subtitle="示例记录"
           icon={Activity}
           delay={0.25}
         />
       </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.28, ease: [0.23, 1, 0.32, 1] }}
+        className="mb-10 rounded-2xl border border-dashed border-border bg-muted/40 p-4 text-sm text-muted-foreground"
+      >
+        当前页面展示的是<strong className="text-foreground">模拟复盘数据</strong>，用于演示功能布局。
+        后续接入真实交易账户或持仓数据后，这里的收益、交易记录与归因分析将自动替换为你的实际投资数据。
+      </motion.div>
 
       {/* Charts Grid */}
       <div className="mb-10 grid gap-6 lg:grid-cols-2">
@@ -144,8 +156,8 @@ export default function ReviewPage() {
           className="rounded-3xl border border-border bg-background p-6 sm:p-8"
         >
           <div className="mb-4">
-            <h3 className="text-lg font-semibold tracking-tight">累计收益走势</h3>
-            <p className="text-sm text-muted-foreground">今年以来账户净值变化</p>
+            <h3 className="text-lg font-semibold tracking-tight">累计收益走势（模拟）</h3>
+            <p className="text-sm text-muted-foreground">演示用净值变化，不代表真实账户</p>
           </div>
           <div className="h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -179,7 +191,10 @@ export default function ReviewPage() {
                     boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
                   }}
                   itemStyle={{ color: "var(--foreground)", fontSize: 13 }}
-                  formatter={(value) => [`${(typeof value === "number" ? value * 100 : 0).toFixed(2)}%`, "累计净值"]}
+                  formatter={(value) => [
+                    `${(typeof value === "number" ? value * 100 : 0).toFixed(2)}%`,
+                    "累计净值",
+                  ]}
                 />
                 <Area
                   type="monotone"
@@ -202,8 +217,8 @@ export default function ReviewPage() {
           className="rounded-3xl border border-border bg-background p-6 sm:p-8"
         >
           <div className="mb-4">
-            <h3 className="text-lg font-semibold tracking-tight">收益归因</h3>
-            <p className="text-sm text-muted-foreground">超额收益来源拆解</p>
+            <h3 className="text-lg font-semibold tracking-tight">收益归因（模拟）</h3>
+            <p className="text-sm text-muted-foreground">超额收益来源拆解示例</p>
           </div>
           <div className="h-[260px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -273,9 +288,14 @@ export default function ReviewPage() {
         transition={{ duration: 0.6, delay: 0.45, ease: [0.23, 1, 0.32, 1] }}
         className="mb-10 rounded-3xl border border-border bg-background p-2"
       >
-        <div className="px-6 py-5">
-          <h3 className="text-lg font-semibold tracking-tight">近期交易</h3>
-          <p className="text-sm text-muted-foreground">最近 5 笔操作记录</p>
+        <div className="flex items-center justify-between px-6 py-5">
+          <div>
+            <h3 className="text-lg font-semibold tracking-tight">近期交易（模拟）</h3>
+            <p className="text-sm text-muted-foreground">示例交易记录，非真实流水</p>
+          </div>
+          <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+            DEMO
+          </span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -327,7 +347,7 @@ export default function ReviewPage() {
           transition={{ duration: 0.6, delay: 0.55, ease: [0.23, 1, 0.32, 1] }}
           className="mb-6 text-xl font-semibold tracking-tight"
         >
-          复盘建议
+          复盘建议（示例）
         </motion.h2>
         <div className="grid gap-6 sm:grid-cols-3">
           {insights.map((item, index) => (

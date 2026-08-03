@@ -1,0 +1,26 @@
+# Frontend
+frontend/node_modules
+frontend/.next
+frontend/out
+frontend/build
+frontend/.vercel
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
+
+# Backend
+backend/__pycache__
+backend/**/__pycache__
+backend/*.pyc
+backend/**/*.pyc
+backend/.venv
+backend/venv
+backend/.env
+
+# IDE / OS
+.DS_Store
+.vscode
+.idea
+*.swp
+
+# Claude
+.claude
