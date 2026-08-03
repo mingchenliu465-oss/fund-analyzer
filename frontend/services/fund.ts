@@ -867,17 +867,89 @@ export async function getMarketStatus(): Promise<MarketStatus> {
   return { status: "未开盘", session: "午间休市", updateTime: timeStr };
 }
 
-export async function getPortfolioOverview(): Promise<PortfolioOverview> {
-  try {
-    return await fetchJson<PortfolioOverview>("/api/portfolio");
-  } catch (err) {
-    console.warn("getPortfolioOverview failed:", err);
-    return {
-      totalAssets: 0, todayReturn: 0, todayReturnPct: 0,
-      cumulativeReturn: 0, cumulativeReturnPct: 0,
-      allocation: [], riskLevel: "暂无", riskScore: 0,
-    };
+// ── 基金类型 → 颜色映射 ──
+
+const TYPE_COLORS: Record<string, string> = {
+  "股票型": "#3b82f6",
+  "混合型": "#8b5cf6",
+  "债券型": "#10b981",
+  "货币型": "#f59e0b",
+  "ETF": "#ef4444",
+  "ETF联接": "#f97316",
+  "QDII": "#06b6d4",
+};
+
+function transformPortfolioToOverview(summary: RealPortfolioSummary): PortfolioOverview {
+  const holdings = summary.holdings ?? [];
+
+  // 按基金类型汇总持仓市值，生成仓位分配
+  const typeValues: Record<string, number> = {};
+  for (const h of holdings) {
+    const type = h.fund_type || "其他";
+    typeValues[type] = (typeValues[type] ?? 0) + (h.current_value ?? 0);
   }
+
+  const totalValue = summary.total_value;
+  const allocation: PortfolioOverview["allocation"] = [];
+
+  for (const [category, value] of Object.entries(typeValues)) {
+    if (value > 0 && totalValue > 0) {
+      allocation.push({
+        category,
+        weight: Math.round((value / totalValue) * 100),
+        color: TYPE_COLORS[category] ?? "#6b7280",
+      });
+    }
+  }
+  allocation.sort((a, b) => b.weight - a.weight);
+
+  // 根据仓位推导风险等级和评分
+  let stockWeight = 0;
+  for (const [type, value] of Object.entries(typeValues)) {
+    if (type === "股票型" || type === "ETF" || type === "ETF联接") stockWeight += value;
+  }
+
+  let riskLevel: string;
+  let riskScore: number;
+
+  if (totalValue > 0) {
+    const stockRatio = stockWeight / totalValue;
+    if (stockRatio >= 0.7)      { riskLevel = "高";   riskScore = 80; }
+    else if (stockRatio >= 0.4) { riskLevel = "中高"; riskScore = 60; }
+    else if (stockRatio >= 0.2) { riskLevel = "中";   riskScore = 40; }
+    else if (stockRatio > 0)    { riskLevel = "中低"; riskScore = 20; }
+    else                         { riskLevel = "低";   riskScore = 10; }
+  } else {
+    riskLevel = "暂无";
+    riskScore = 0;
+  }
+
+  return {
+    totalAssets: totalValue,
+    todayReturn: 0,           // 后端暂未提供日内变动
+    todayReturnPct: 0,
+    cumulativeReturn: summary.total_profit,
+    cumulativeReturnPct: summary.total_profit_pct,
+    allocation,
+    riskLevel,
+    riskScore,
+  };
+}
+
+export async function getPortfolioOverview(): Promise<PortfolioOverview> {
+  if (USE_REAL_API) {
+    try {
+      const summary = await fetchJson<RealPortfolioSummary>("/api/portfolio");
+      return transformPortfolioToOverview(summary);
+    } catch (err) {
+      console.warn("getPortfolioOverview failed:", err);
+    }
+  }
+  return {
+    totalAssets: 0, todayReturn: 0, todayReturnPct: 0,
+    cumulativeReturn: 0, cumulativeReturnPct: 0,
+    allocation: [], riskLevel: "暂无", riskScore: 0,
+  };
 }
 
 export async function getPeerComparison(code: string): Promise<PeerComparison[]> {
@@ -986,12 +1058,13 @@ export function formatRatio(value: number, digits = 2): string {
   return value.toFixed(digits);
 }
 
-export function formatCurrency(value: number, digits = 2): string {
-  return `¥${value.toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
+export function formatCurrency(value: number | null | undefined, digits = 2): string {
+  return `¥${(value ?? 0).toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
 }
 
-export function formatAsset(value: number): string {
-  if (value >= 100000000) return `${(value / 100000000).toFixed(2)}亿`;
-  if (value >= 10000) return `${(value / 10000).toFixed(2)}万`;
-  return value.toFixed(2);
+export function formatAsset(value: number | null | undefined): string {
+  const v = value ?? 0;
+  if (v >= 100000000) return `${(v / 100000000).toFixed(2)}亿`;
+  if (v >= 10000) return `${(v / 10000).toFixed(2)}万`;
+  return v.toFixed(2);
 }

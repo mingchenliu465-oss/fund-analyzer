@@ -215,7 +215,11 @@ export default function HomePage() {
           <div className="mb-3 flex items-center justify-between">
             <div>
               <h2 className="text-base font-semibold tracking-tight">我的组合总览</h2>
-              <p className="text-xs text-muted-foreground">示例账户 · 模拟数据</p>
+              <p className="text-xs text-muted-foreground">
+                {process.env.NEXT_PUBLIC_USE_REAL_API === "true"
+                  ? portfolio?.totalAssets ? "真实持仓数据" : "暂无持仓记录"
+                  : "示例账户 · 模拟数据"}
+              </p>
             </div>
             <Link href="/portfolio">
               <Button variant="outline" size="sm" className="h-8 rounded-lg px-3">
