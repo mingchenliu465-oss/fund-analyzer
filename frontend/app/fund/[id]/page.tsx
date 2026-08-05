@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -18,12 +19,17 @@ import {
   Zap,
 } from "lucide-react";
 import {
+  Area,
+  AreaChart,
+  CartesianGrid,
   Cell,
   Legend,
   Pie,
   PieChart,
   ResponsiveContainer,
   Tooltip,
+  XAxis,
+  YAxis,
 } from "recharts";
 
 import { MetricCard } from "@/components/metric-card";
@@ -39,6 +45,7 @@ import { PeerComparison } from "@/components/peer-comparison";
 import {
   DrawdownPoint,
   FundDetail,
+  HoldStructure,
   KlinePoint,
   NavPeriod,
   PeerComparison as PeerComparisonType,
@@ -49,19 +56,22 @@ import {
   getFundDetail,
   getFundDrawdownHistory,
   getFundKlineHistory,
+  getHoldStructure,
   getPeerComparison,
   getReturnRanking,
   searchFunds,
 } from "@/services/fund";
 
+import { Users } from "lucide-react";
+
+// ── K 线周期选项 ──
+
 const PERIODS: { key: NavPeriod; label: string }[] = [
-  { key: "5D", label: "5日" },
-  { key: "10D", label: "10日" },
-  { key: "20D", label: "20日" },
-  { key: "日K", label: "日K" },
-  { key: "周K", label: "周K" },
-  { key: "月K", label: "月K" },
-  { key: "年K", label: "年K" },
+  { key: "1M", label: "1月" },
+  { key: "3M", label: "3月" },
+  { key: "6M", label: "6月" },
+  { key: "1Y", label: "1年" },
+  { key: "3Y", label: "3年" },
 ];
 
 export default function FundDetailPage() {
@@ -69,46 +79,68 @@ export default function FundDetailPage() {
   const rawId = params?.id;
   const code = typeof rawId === "string" ? rawId.toUpperCase() : "";
 
-  const [fund, setFund] = useState<FundDetail | null | undefined>(undefined);
-  const [klineData, setKlineData] = useState<KlinePoint[]>([]);
-  const [drawdownData, setDrawdownData] = useState<DrawdownPoint[]>([]);
-  const [peers, setPeers] = useState<PeerComparisonType[]>([]);
-  const [ranking, setRanking] = useState<ReturnRanking | null>(null);
-  const [period, setPeriod] = useState<NavPeriod>("日K");
+  const [period, setPeriod] = useState<NavPeriod>("1Y");
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<{ code: string; name: string }[]>([]);
-  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (!code) return;
-    setLoading(true);
-    Promise.all([
-      getFundDetail(code),
-      getFundKlineHistory(code, period),
-      getFundDrawdownHistory(code, period),
-      getPeerComparison(code),
-      getReturnRanking(code),
-    ])
-      .then(([detail, kline, drawdown, peerData, rankData]) => {
-        setFund(detail);
-        setKlineData(kline);
-        setDrawdownData(drawdown);
-        setPeers(peerData);
-        setRanking(rankData);
-      })
-      .finally(() => setLoading(false));
-  }, [code]);
+  // ── React Query: 基金详情（5 分钟缓存）──
+  const {
+    data: fund,
+    isLoading: fundLoading,
+    isError: fundError,
+  } = useQuery({
+    queryKey: ["fundDetail", code],
+    queryFn: () => getFundDetail(code),
+    enabled: !!code,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
 
-  useEffect(() => {
-    if (!code) return;
-    setLoading(true);
-    Promise.all([getFundKlineHistory(code, period), getFundDrawdownHistory(code, period)])
-      .then(([kline, drawdown]) => {
-        setKlineData(kline);
-        setDrawdownData(drawdown);
-      })
-      .finally(() => setLoading(false));
-  }, [period, code]);
+  // ── React Query: K 线数据（按 code + period 缓存）──
+  const { data: klineData = [], isFetching: klineFetching } = useQuery({
+    queryKey: ["kline", code, period],
+    queryFn: () => getFundKlineHistory(code, period),
+    enabled: !!code,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+    placeholderData: keepPreviousData,
+  });
+
+  // ── React Query: 回撤数据（按 code + period 缓存）──
+  const { data: drawdownData = [] } = useQuery({
+    queryKey: ["drawdown", code, period],
+    queryFn: () => getFundDrawdownHistory(code, period),
+    enabled: !!code,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+    placeholderData: keepPreviousData,
+  });
+
+  // ── React Query: 同类对比 ──
+  const { data: peers = [] } = useQuery({
+    queryKey: ["peers", code],
+    queryFn: () => getPeerComparison(code),
+    enabled: !!code,
+    staleTime: 30 * 60 * 1000,
+    retry: 1,
+  });
+
+  // ── React Query: 收益排名 ──
+  const { data: ranking = null } = useQuery({
+    queryKey: ["ranking", code],
+    queryFn: () => getReturnRanking(code),
+    enabled: !!code,
+    staleTime: 30 * 60 * 1000,
+    retry: 1,
+  });
+
+  // ── React Query: 持有人结构 ──
+  const { data: holdStructure = null } = useQuery<HoldStructure | null>({
+    queryKey: ["holdStructure"],
+    queryFn: getHoldStructure,
+    staleTime: 2 * 60 * 60 * 1000, // 2 小时（季报数据）
+    retry: 1,
+  });
 
   useEffect(() => {
     if (!query.trim()) {
@@ -137,12 +169,12 @@ export default function FundDetailPage() {
     );
   }
 
-  if (fund === null) {
+  if (!fund && (fundError || fund === null)) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-20 text-center sm:px-6">
         <AlertTriangle className="mx-auto h-12 w-12 text-warning" />
         <h1 className="mt-4 text-2xl font-semibold">未找到基金 {code}</h1>
-        <p className="mt-2 text-muted-foreground">请检查基金代码是否正确，或返回首页搜索。当前展示的是模拟数据。</p>
+        <p className="mt-2 text-muted-foreground">请检查基金代码是否正确，或返回首页搜索。</p>
         <Link href="/" className="mt-6 inline-block">
           <Button className="h-12 rounded-2xl bg-foreground px-6 text-background hover:bg-foreground/90">
             <ArrowLeft className="mr-2 h-4 w-4" /> 返回首页
@@ -152,7 +184,7 @@ export default function FundDetailPage() {
     );
   }
 
-  if (!fund) {
+  if (!fund || fundLoading) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-20 text-center text-muted-foreground sm:px-6">
         加载中…
@@ -341,7 +373,7 @@ export default function FundDetailPage() {
           ))}
         </motion.div>
 
-        {ranking && (
+        {ranking && ranking.rank > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -356,7 +388,7 @@ export default function FundDetailPage() {
                 / {ranking.total}
               </span>
             </div>
-            <div className="text-xs text-muted-foreground">前 {ranking.percentile}%（近一年收益）</div>
+            <div className="text-xs text-muted-foreground">前 {ranking.percentile ?? '--'}%（近一年收益）</div>
           </motion.div>
         )}
       </div>
@@ -370,15 +402,19 @@ export default function FundDetailPage() {
       >
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="text-base font-semibold tracking-tight">净值走势（K线）</h3>
-            <p className="text-xs text-muted-foreground">红涨绿跌 · 悬停查看 OHLC</p>
+            <h3 className="text-base font-semibold tracking-tight">
+              {fund.type === "ETF" ? "K线走势" : "净值走势"}
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              {fund.type === "ETF" ? "红涨绿跌 · OHLC 蜡烛图" : "净值折线 · MA5/MA10/MA20"}
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             {PERIODS.map((p) => (
               <button
                 key={p.key}
                 onClick={() => setPeriod(p.key)}
-                disabled={loading}
+                disabled={klineFetching}
                 className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                   period === p.key
                     ? "bg-foreground text-background"
@@ -393,7 +429,7 @@ export default function FundDetailPage() {
 
         <div className="h-[320px] w-full">
           {klineData.length > 0 ? (
-            <KLineChart data={klineData} fundType={fund.type} />
+            <KLineChart key={`${code}-${period}`} data={klineData} fundType={fund.type} />
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
               暂无数据
@@ -490,9 +526,9 @@ export default function FundDetailPage() {
             </ResponsiveContainer>
           </div>
           <div className="mt-2 grid grid-cols-2 gap-2">
-            {fund.sectors.map((item) => (
+            {fund.sectors.map((item, index) => (
               <div
-                key={item.name}
+                key={`${item.name}-${index}`}
                 className="flex items-center justify-between rounded-lg border border-border p-2"
               >
                 <div className="flex items-center gap-2">
@@ -536,6 +572,98 @@ export default function FundDetailPage() {
         <PeerComparison data={peers} targetCode={fund.code} />
       </motion.div>
 
+      {/* Hold Structure (全市场机构/个人持仓趋势) */}
+      {holdStructure && holdStructure.points.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.49, ease: [0.23, 1, 0.32, 1] }}
+          className="mb-5 rounded-2xl border border-border bg-background p-4 sm:p-5"
+        >
+          <div className="mb-3">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-base font-semibold tracking-tight">持有人结构</h3>
+            </div>
+            <p className="text-xs text-muted-foreground">{holdStructure.note}</p>
+          </div>
+          <div className="h-[240px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart
+                data={holdStructure.points.map((p) => ({
+                  date: p.date.slice(0, 7),
+                  "机构持有": p.institutionPct,
+                  "个人持有": p.individualPct,
+                  "内部持有": p.internalPct,
+                }))}
+                margin={{ top: 8, right: 8, bottom: 0, left: -16 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                <XAxis
+                  dataKey="date"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
+                  dy={8}
+                />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
+                  domain={[0, 100]}
+                  tickFormatter={(v) => `${v}%`}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--background)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "12px",
+                    boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
+                  }}
+                  itemStyle={{ fontSize: 13 }}
+                  formatter={(value) => [`${Number(value).toFixed(1)}%`, undefined]}
+                />
+                <Legend
+                  verticalAlign="top"
+                  height={30}
+                  iconType="circle"
+                  formatter={(value: string) => (
+                    <span className="text-xs text-muted-foreground">{value}</span>
+                  )}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="机构持有"
+                  stroke="#0071e3"
+                  fill="#0071e3"
+                  fillOpacity={0.08}
+                  strokeWidth={2}
+                  dot={false}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="个人持有"
+                  stroke="#ff9500"
+                  fill="#ff9500"
+                  fillOpacity={0.08}
+                  strokeWidth={2}
+                  dot={false}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="内部持有"
+                  stroke="#af52de"
+                  fill="#af52de"
+                  fillOpacity={0.06}
+                  strokeWidth={2}
+                  dot={false}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </motion.div>
+      )}
+
       {/* CTA */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
@@ -568,6 +696,7 @@ function MetaItem({ label, value }: { label: string; value: string }) {
 }
 
 function getRiskBadgeVariant(score: number): "positive" | "warning" | "negative" | "default" {
+  if (isNaN(score) || score < 0) return "default";
   if (score < 30) return "positive";
   if (score < 60) return "warning";
   if (score < 80) return "default";

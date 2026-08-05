@@ -32,7 +32,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api import analysis, fund, market, portfolio
-from services import analysis_service, fund_service
+from services import analysis_service, fund_service, market_service
 
 # 用于后台预热缓存的线程池
 _warmup_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="warmup-")
@@ -48,6 +48,10 @@ def _warmup_caches() -> None:
         analysis_service._load_rank_df()
     except Exception as exc:
         print(f"Warmup rank list failed: {exc}")
+    try:
+        market_service.indices()
+    except Exception as exc:
+        print(f"Warmup indices failed: {exc}")
 
 
 @asynccontextmanager

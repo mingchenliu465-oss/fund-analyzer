@@ -8,11 +8,15 @@ from datetime import datetime, timedelta
 import akshare as ak
 import pandas as pd
 
+from services.fund_service import _call_akshare
+
 from models.analysis import (
     AICommentary,
     AllocationItem,
     FlowPeriod,
     FundFlow,
+    HoldStructure,
+    HoldStructurePoint,
     PeerComparison,
     PortfolioOverview,
     ReturnRanking,
@@ -91,14 +95,14 @@ def _load_rank_df() -> pd.DataFrame:
         return cached
 
     try:
-        open_df = ak.fund_open_fund_rank_em()
+        open_df = _call_akshare(ak.fund_open_fund_rank_em, timeout=10)
         open_df = open_df[["基金代码", "基金简称", "近1年"]].copy()
         open_df["source"] = "open"
     except Exception:
         open_df = pd.DataFrame(columns=["基金代码", "基金简称", "近1年", "source"])
 
     try:
-        etf_df = ak.fund_exchange_rank_em()
+        etf_df = _call_akshare(ak.fund_exchange_rank_em, timeout=10)
         etf_df = etf_df[["基金代码", "基金简称", "近1年"]].copy()
         etf_df["source"] = "etf"
     except Exception:
@@ -106,6 +110,8 @@ def _load_rank_df() -> pd.DataFrame:
 
     df = pd.concat([open_df, etf_df], ignore_index=True)
     df["近1年"] = pd.to_numeric(df["近1年"], errors="coerce")
+    # 过滤无效收益数据（NaN、0、极端异常值），确保排名基于有效基金
+    df = df[df["近1年"].notna() & (df["近1年"] != 0)]
     df = df.drop_duplicates(subset=["基金代码"], keep="first")
     df = df.sort_values("近1年", ascending=False).reset_index(drop=True)
     fund_service._set_cache(cache_key, df, ttl=1800)
@@ -113,12 +119,12 @@ def _load_rank_df() -> pd.DataFrame:
 
 
 def _rank_dict() -> dict[str, float]:
-    """把排名 DataFrame 转成 code -> 近1年收益(小数) 的字典。"""
+    """把排名 DataFrame 转成 code -> 近1年收益(小数) 的字典。排除无效收益。"""
     df = _load_rank_df()
     return {
         str(row["基金代码"]): float(row["近1年"]) / 100
         for _, row in df.iterrows()
-        if pd.notna(row["近1年"])
+        if pd.notna(row["近1年"]) and float(row["近1年"]) != 0
     }
 
 
@@ -174,20 +180,21 @@ def peers(code: str) -> list[PeerComparison]:
 
 
 def ranking(code: str) -> ReturnRanking:
-    """按近一年收益排名。"""
+    """按近一年收益排名。仅统计有效收益的基金。"""
     upper = code.strip().upper()
-    df = _load_rank_df()
+    df = _load_rank_df()  # 已过滤 NaN 和零值
     total = len(df)
     if total == 0:
-        return ReturnRanking(rank=1, total=1, percentile=100)
+        return ReturnRanking(rank=0, total=0, percentile=0)
 
-    # 使用 index 快速定位
+    # 使用 index 快速定位（DataFrame 按近1年降序排列）
     positions = df.index[df["基金代码"] == upper].tolist()
     if positions:
         rank = int(positions[0]) + 1
+        percentile = round(rank / total * 100)
     else:
-        rank = total
-    percentile = round(rank / total * 100)
+        # 基金不在排名列表中（可能是冷门基金或数据缺失）
+        return ReturnRanking(rank=0, total=total, percentile=0)
     return ReturnRanking(rank=rank, total=total, percentile=percentile)
 
 
@@ -205,46 +212,151 @@ def portfolio() -> PortfolioOverview:
     )
 
 
+def hold_structure() -> HoldStructure:
+    """全市场机构/个人持有比例趋势。
+
+    数据来源：akshare fund_hold_structure_em()，为全市场汇总数据，
+    非单只基金数据。用于了解整体市场情绪和机构参与度趋势。
+    """
+    cache_key = "hold_structure"
+    cached = fund_service._get_cache(cache_key)
+    if cached is not None:
+        return cached
+
+    points: list[HoldStructurePoint] = []
+    try:
+        df = _call_akshare(ak.fund_hold_structure_em, timeout=15)
+        logger.info("hold_structure: got %d rows, columns=%s", len(df), list(df.columns))
+
+        # akshare 列名可能使用 "比列"（列）而非 "比例"（例），做列名映射
+        col_map: dict[str, str] = {}
+        for col in df.columns:
+            if "截止日期" in col or "日期" in col:
+                col_map["date"] = col
+            elif "基金家数" in col or "家数" in col:
+                col_map["funds"] = col
+            elif "机构" in col and ("持有" in col or "占比" in col):
+                col_map["inst"] = col
+            elif "个人" in col and ("持有" in col or "占比" in col):
+                col_map["indv"] = col
+            elif "内部" in col and ("持有" in col or "占比" in col):
+                col_map["intl"] = col
+            elif "总份额" in col or "份额" in col:
+                col_map["shares"] = col
+
+        if len(col_map) < 6:
+            logger.warning("hold_structure: column mapping incomplete, found: %s", list(col_map.keys()))
+
+        for _, row in df.iterrows():
+            try:
+                points.append(HoldStructurePoint(
+                    date=str(row.get(col_map.get("date", ""), ""))[:10],
+                    fund_count=int(row.get(col_map.get("funds", ""), 0) or 0),
+                    institution_pct=float(row.get(col_map.get("inst", ""), 0) or 0),
+                    individual_pct=float(row.get(col_map.get("indv", ""), 0) or 0),
+                    internal_pct=float(row.get(col_map.get("intl", ""), 0) or 0),
+                    total_shares=float(row.get(col_map.get("shares", ""), 0) or 0),
+                ))
+            except (ValueError, TypeError):
+                continue
+    except Exception as exc:
+        logger.warning("hold_structure fetch failed: %s", exc)
+
+    result = HoldStructure(
+        points=points,
+        note="全市场汇总数据（非单只基金），用于了解机构/个人持仓趋势。数据来源：天天基金/东方财富。",
+    )
+    fund_service._set_cache(cache_key, result, ttl=7200)  # 2 小时缓存
+    return result
+
+
 def flow(code: str) -> FundFlow:
     """资金流向：暂无真实数据源，返回空（后续阶段接入）。"""
     return FundFlow(code=code.strip().upper(), periods=[])
 
 
 def commentary(code: str) -> AICommentary:
-    """基于基金类型的 AI 解读（模拟）。"""
+    """基于真实指标的数据分析摘要（非 AI 生成）。
+
+    根据基金的实际收益率、回撤、波动率、Sharpe 比率等指标，
+    生成结构化的分析文本。所有数据均来自真实计算。
+    """
     upper = code.strip().upper()
     try:
         fund = fund_service.get_by_code(upper)
-        name = fund.name
-        ftype = fund.type
-    except ValueError:
-        name = upper
-        ftype = "基金"
+    except Exception:
+        return AICommentary(
+            performance=f"未找到基金代码 {upper} 的数据。",
+            risk_warning="暂无数据",
+            suitable_for="暂无数据",
+            suggestion="请确认基金代码是否正确。",
+        )
 
+    name = fund.name
+    ftype = fund.type
+    ret_1y = fund.one_year_return
+    m = fund.metrics
+    ret_str = f"{ret_1y * 100:+.2f}%"
+    dd_str = f"{m.max_drawdown * 100:.1f}%"
+    vol_str = f"{m.volatility * 100:.1f}%"
+    sharpe_str = f"{m.sharpe:.2f}"
+
+    # ── 收益描述 ──
+    if ret_1y > 0.20:
+        perf = f"{name} 近一年收益率 {ret_str}，表现优异，显著跑赢同类平均。"
+    elif ret_1y > 0.05:
+        perf = f"{name} 近一年收益率 {ret_str}，处于同类中等水平。"
+    elif ret_1y > 0:
+        perf = f"{name} 近一年收益率 {ret_str}，收益偏保守。"
+    elif ret_1y > -0.10:
+        perf = f"{name} 近一年收益率 {ret_str}，短期承压，需关注后续表现。"
+    else:
+        perf = f"{name} 近一年收益率 {ret_str}，跌幅较大，建议审慎评估。"
+
+    # ── 风险描述 ──
+    risks = []
+    if m.max_drawdown < -0.30:
+        risks.append(f"最大回撤 {dd_str}，回撤幅度较大")
+    elif m.max_drawdown < -0.10:
+        risks.append(f"最大回撤 {dd_str}，处于可接受范围")
+    else:
+        risks.append(f"最大回撤仅 {dd_str}，风险控制较好")
+
+    if m.volatility > 0.25:
+        risks.append(f"年化波动率 {vol_str}，波动较高")
+    elif m.volatility > 0.10:
+        risks.append(f"年化波动率 {vol_str}，波动适中")
+    else:
+        risks.append(f"年化波动率 {vol_str}，波动较低")
+
+    risk_warning = "；".join(risks) + "。"
+
+    # ── 适合人群 ──
+    risk_score = m.risk_score
+    if risk_score >= 75:
+        suitable_for = "适合风险承受能力较强、投资周期 3 年以上的积极型投资者。"
+    elif risk_score >= 50:
+        suitable_for = "适合风险承受能力中等、投资周期 1-3 年的稳健型投资者。"
+    elif risk_score >= 25:
+        suitable_for = "适合风险偏好较低、追求稳健收益的保守型投资者。"
+    else:
+        suitable_for = "适合风险厌恶型投资者，可作为现金管理或短期配置工具。"
+
+    # ── 配置建议 ──
     if ftype == "货币型":
-        return AICommentary(
-            performance=f"{name} 作为货币型基金，净值波动极低，七日年化收益保持稳定，适合作为现金管理工具。",
-            risk_warning="货币基金虽不保本，但历史上极少出现单日亏损，流动性风险较低。",
-            suitable_for="风险厌恶型投资者、短期闲置资金打理。",
-            suggestion="可作为组合的流动性缓冲，建议保留 3-6 个月生活费的仓位。",
-        )
-    if ftype == "债券型":
-        return AICommentary(
-            performance=f"{name} 近期收益曲线平滑，回撤控制优于权益类产品，在利率下行环境中表现稳健。",
-            risk_warning="需关注利率上行带来的净值回撤及信用债违约风险。",
-            suitable_for="追求稳健收益、能承受小幅波动的投资者。",
-            suggestion="适合作为组合底仓，与权益基金搭配可降低整体波动。",
-        )
-    if ftype == "ETF":
-        return AICommentary(
-            performance=f"{name} 跟踪指数透明度高，近一年弹性较大，适合作为战术配置工具。",
-            risk_warning="ETF 二级市场存在折溢价与波动风险，行业主题 ETF 回撤可能较大。",
-            suitable_for="有一定择时能力、希望低成本获取 Beta 收益的投资者。",
-            suggestion="建议结合均线或估值水平进行定投或波段操作，避免追高。",
-        )
+        suggestion = "建议作为组合流动性缓冲，保留 3-6 个月生活费的仓位。"
+    elif ftype == "债券型":
+        suggestion = "适合作为组合底仓（建议占 30%-50%），与权益基金搭配可降低整体波动。"
+    elif sharpe_str and m.sharpe > 0.5:
+        suggestion = f"Sharpe 比率 {sharpe_str}，风险调整后收益尚可。建议通过定投方式参与，避免单笔重仓。"
+    elif m.sharpe > 0:
+        suggestion = f"Sharpe 比率 {sharpe_str}，风险调整后收益偏低。建议控制仓位在组合的 10%-20%。"
+    else:
+        suggestion = "当前风险收益比较低，建议观望或仅少量配置。"
+
     return AICommentary(
-        performance=f"{name} 近期业绩处于同类中等偏上水平，选股或行业配置贡献主要超额收益。",
-        risk_warning="权益仓位较高，短期可能面临 15%-25% 的回撤，需评估自身承受能力。",
-        suitable_for="能承受中等以上波动、投资周期不少于 3 年的投资者。",
-        suggestion="建议通过定投方式平滑成本，避免单笔重仓，并定期审视基金经理稳定性。",
+        performance=perf,
+        risk_warning=risk_warning,
+        suitable_for=suitable_for,
+        suggestion=suggestion,
     )

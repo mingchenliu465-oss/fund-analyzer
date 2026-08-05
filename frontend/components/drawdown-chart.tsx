@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import {
   Area,
   AreaChart,
@@ -16,11 +17,21 @@ interface DrawdownChartProps {
 }
 
 export function DrawdownChart({ data }: DrawdownChartProps) {
+  const gradientId = useId();
+
+  if (!data || data.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+        暂无回撤数据
+      </div>
+    );
+  }
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
         <defs>
-          <linearGradient id="drawdownGradient" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%" stopColor="#ff3b30" stopOpacity={0.15} />
             <stop offset="95%" stopColor="#ff3b30" stopOpacity={0} />
           </linearGradient>
@@ -56,7 +67,7 @@ export function DrawdownChart({ data }: DrawdownChartProps) {
           dataKey="drawdown"
           stroke="#ff3b30"
           strokeWidth={2}
-          fill="url(#drawdownGradient)"
+          fill={`url(#${gradientId})`}
           dot={false}
           activeDot={{ r: 4, strokeWidth: 0, fill: "#ff3b30" }}
         />

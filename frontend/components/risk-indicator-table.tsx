@@ -6,14 +6,22 @@ interface RiskIndicatorTableProps {
   metrics: FundMetrics;
 }
 
+function safeFormatRatio(v: number | null | undefined): string {
+  return v != null ? formatRatio(v) : "—";
+}
+
+function safeFormatPercent(v: number | null | undefined, digits = 0): string {
+  return v != null ? formatPercent(v, digits) : "—";
+}
+
 export function RiskIndicatorTable({ metrics }: RiskIndicatorTableProps) {
   const items = [
-    { label: "夏普比率", value: formatRatio(metrics.sharpe), desc: "风险调整后收益" },
-    { label: "索提诺比率", value: formatRatio(metrics.sortino), desc: "下行风险调整收益" },
-    { label: "Alpha", value: formatPercent(metrics.alpha, 2), desc: "超额收益" },
-    { label: "Beta", value: formatRatio(metrics.beta), desc: "相对市场弹性" },
-    { label: "信息比率", value: formatRatio(metrics.informationRatio), desc: "主动管理能力" },
-    { label: "最大回撤", value: formatPercent(metrics.maxDrawdown), desc: "历史极端亏损" },
+    { label: "夏普比率", value: safeFormatRatio(metrics.sharpe), desc: "风险调整后收益" },
+    { label: "索提诺比率", value: safeFormatRatio(metrics.sortino), desc: "下行风险调整收益" },
+    { label: "Alpha", value: safeFormatPercent(metrics.alpha, 2), desc: "超额收益" },
+    { label: "Beta", value: safeFormatRatio(metrics.beta), desc: "相对市场弹性" },
+    { label: "信息比率", value: safeFormatRatio(metrics.informationRatio), desc: "主动管理能力" },
+    { label: "最大回撤", value: safeFormatPercent(metrics.maxDrawdown), desc: "历史极端亏损" },
   ];
 
   return (

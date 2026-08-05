@@ -14,8 +14,6 @@ const navItems = [
   { href: "/review", label: "投资复盘", icon: FileText },
 ];
 
-const USE_REAL_API = process.env.NEXT_PUBLIC_USE_REAL_API === "true";
-
 export function Nav() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -64,13 +62,9 @@ export function Nav() {
 
         <div className="border-t border-border/60 p-4">
           <div className="rounded-xl bg-muted/40 p-3">
-            <div className="text-xs font-medium">
-              {USE_REAL_API ? "真实数据" : "模拟数据"}
-            </div>
+            <div className="text-xs font-medium">Fund Analyzer</div>
             <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              {USE_REAL_API
-                ? "数据来自 akshare 公开接口，仅供参考。"
-                : "当前展示为示例数据，启动后端并设置 NEXT_PUBLIC_USE_REAL_API=true 后接入真实 API。"}
+              数据来自 akshare 公开接口，仅供参考。
             </div>
           </div>
         </div>

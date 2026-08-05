@@ -9,6 +9,7 @@ import akshare as ak
 import pandas as pd
 
 from models.market import KlinePoint, MarketIndex, MarketStatus, NavPeriod
+from services.fund_service import _call_akshare, _get_cache, _set_cache
 
 logger = logging.getLogger(__name__)
 
@@ -42,14 +43,14 @@ def _format_date(dt: datetime, period: NavPeriod) -> str:
 
 
 def _resample_to_kline(nav_df: pd.DataFrame, period: NavPeriod) -> list[KlinePoint]:
-    """ETF: 对真实 OHLCV 行按 period 聚合；开放基金：nav_df 无 OHLC 列 → 返回空。"""
+    """将净值/OHLCV 数据转为 K线点。
+
+    ETF：有真实 OHLCV 列，按 period 聚合。
+    开放基金：仅有单位净值列，生成伪 K 线（open≈close≈nav，无成交量），
+    前端 K 线图会正常渲染为走势线。
+    """
     if nav_df.empty:
         return []
-
-    # 检查是否有真实 OHLC 列（ETF 数据）
-    ohlc_cols = {"open", "high", "low", "close"}
-    if not ohlc_cols.issubset(nav_df.columns):
-        return []  # 开放基金净值数据，不生成假 OHLC
 
     df = nav_df.copy()
     df["净值日期"] = pd.to_datetime(df["净值日期"])
@@ -71,16 +72,28 @@ def _resample_to_kline(nav_df: pd.DataFrame, period: NavPeriod) -> list[KlinePoi
     }
     freq = freq_map[period]
 
-    # 聚合真实 OHLCV
-    agg_spec: dict = {"open": "first", "high": "max", "low": "min", "close": "last"}
-    has_volume = "volume" in df.columns
-    has_turnover = "turnover" in df.columns
-    if has_volume:
-        agg_spec["volume"] = "sum"
-    if has_turnover:
-        agg_spec["turnover"] = "sum"
+    has_ohlc = {"open", "high", "low", "close"}.issubset(df.columns)
 
-    resampled = df.resample(freq).agg(agg_spec).dropna()
+    if has_ohlc:
+        # ETF: 聚合真实 OHLCV
+        agg_spec: dict = {"open": "first", "high": "max", "low": "min", "close": "last"}
+        has_volume = "volume" in df.columns
+        has_turnover = "turnover" in df.columns
+        if has_volume:
+            agg_spec["volume"] = "sum"
+        if has_turnover:
+            agg_spec["turnover"] = "sum"
+        resampled = df.resample(freq).agg(agg_spec).dropna()
+    else:
+        # 开放基金: 基于单位净值生成伪 OHLC（走势线模式）
+        nav_series = df["单位净值"].astype(float)
+        resampled = nav_series.resample(freq).ohlc()
+        resampled["volume"] = 0.0
+        resampled["turnover"] = 0.0
+        resampled = resampled.dropna()
+        has_volume = True
+        has_turnover = True
+
     points: list[KlinePoint] = []
     for dt, row in resampled.iterrows():
         points.append(
@@ -106,27 +119,43 @@ def _etf_kline(code: str, period: NavPeriod) -> list[KlinePoint]:
 
 
 def kline(code: str, period: NavPeriod = NavPeriod.DAILY) -> list[KlinePoint]:
-    """ETF: 返回真实 OHLCV K 线。开放基金: 返回空列表（使用 nav-history 接口获取净值走势）。"""
-    upper = code.strip().upper()
-    try:
-        try:
-            detail = fund_service.get_by_code(upper)
-            is_etf = detail.type == "ETF"
-        except Exception:
-            is_etf = _is_etf(upper)
+    """返回基金的 K 线数据。
 
-        if is_etf:
-            return _etf_kline(upper, period)
-        return []  # 开放基金不生成假 OHLC
+    ETF: 真实 OHLCV 数据（含成交量）。
+    开放基金: 基于净值的伪 K 线（走势线模式，无成交量），前端正常渲染。
+
+    通过代码前缀判断 ETF/非 ETF，不触发 get_by_code() 避免冗余 akshare 调用。
+    """
+    from services import fund_service
+
+    upper = code.strip().upper()
+
+    # 通过代码前缀直接判断是否 ETF，无需调 get_by_code()
+    if _is_etf(upper):
+        return _etf_kline(upper, period)
+
+    # 开放基金: 获取净值历史，转为 K 线格式
+    try:
+        nav_df = fund_service._fetch_nav_history(upper)
+        days = _period_to_days(period)
+        cutoff = datetime.now() - timedelta(days=days)
+        nav_df = nav_df[nav_df["净值日期"] >= cutoff]
+        return _resample_to_kline(nav_df, period)
     except Exception as exc:
         logger.warning("kline fetch failed for %s: %s", upper, exc)
         return []
 
 
 def indices() -> list[MarketIndex]:
+    # 市场指数缓存 2 分钟（盘中可能微调，但避免每次都请求）
+    cache_key = "market_indices"
+    cached = _get_cache(cache_key)
+    if cached is not None:
+        return cached
+
     target_names = {"上证指数", "沪深300", "创业板指", "中证500", "中证全债"}
     try:
-        df = ak.stock_zh_index_spot_sina()
+        df = _call_akshare(ak.stock_zh_index_spot_sina, timeout=6)
         df = df.rename(
             columns={
                 "代码": "code",
@@ -151,33 +180,40 @@ def indices() -> list[MarketIndex]:
                 )
             )
         if results:
-            names = {r.name for r in results}
-            if "沪深300" not in names:
-                results.append(MarketIndex(name="沪深300", value="3,842.15", change=1.24, up=True))
-            if "中证500" not in names:
-                results.append(MarketIndex(name="中证500", value="5,621.38", change=0.86, up=True))
-            if "创业板指" not in names:
-                results.append(MarketIndex(name="创业板指", value="2,018.72", change=-0.34, up=False))
-            return results[:6]
+            _set_cache(cache_key, results, ttl=120)  # 2 分钟缓存
+            return results
     except Exception as exc:
-        logger.warning("index spot fetch failed: %s", exc)
+        logger.warning("indices fetch failed: %s", exc)
 
-    return [
-        MarketIndex(name="沪深300", value="3,842.15", change=1.24, up=True),
-        MarketIndex(name="中证500", value="5,621.38", change=0.86, up=True),
-        MarketIndex(name="创业板指", value="2,018.72", change=-0.34, up=False),
-        MarketIndex(name="中证全债", value="245.18", change=0.05, up=True),
-    ]
+    # 数据源暂时不可用，返回空（不伪造数据）
+    _set_cache(cache_key, [], ttl=120)  # 失败时也缓存空结果，避免频繁重试
+    return []
 
 
 def status() -> MarketStatus:
     now = datetime.now()
-    hour = now.hour
-    minute = now.minute
-    time_str = f"{hour:02d}:{minute:02d}"
+    current = now.time()
 
-    if (hour == 9 and minute >= 30) or hour == 10 or (hour == 11 and minute <= 30) or (hour >= 13 and hour < 15):
-        return MarketStatus(status="交易中", session="A股连续竞价", update_time=time_str)
-    if hour >= 15 or hour < 9 or (hour == 9 and minute < 30):
-        return MarketStatus(status="已收盘", session="等待下一交易日", update_time=time_str)
-    return MarketStatus(status="未开盘", session="午间休市", update_time=time_str)
+    morning_start = current.replace(hour=9, minute=30, second=0)
+    morning_end = current.replace(hour=11, minute=30, second=0)
+    afternoon_start = current.replace(hour=13, minute=0, second=0)
+    afternoon_end = current.replace(hour=15, minute=0, second=0)
+
+    if morning_start <= current <= morning_end or afternoon_start <= current <= afternoon_end:
+        status_str = "交易中"
+        session = "continuous"
+    elif current < morning_start:
+        status_str = "未开盘"
+        session = "pre"
+    elif morning_end < current < afternoon_start:
+        status_str = "午间休市"
+        session = "lunch"
+    else:
+        status_str = "已收盘"
+        session = "post"
+
+    return MarketStatus(
+        status=status_str,
+        session=session,
+        update_time=now.strftime("%H:%M:%S"),
+    )

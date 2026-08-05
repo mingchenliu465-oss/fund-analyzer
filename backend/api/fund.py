@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from models.fund import FundDetail, FundSummary
 from models.market import NavPeriod, NavPoint
-from services import fund_service
+from services import fund_service, portfolio_service
 
 router = APIRouter(prefix="/funds", tags=["funds"])
 
@@ -33,6 +33,50 @@ def fund_rankings(limit: int = Query(default=10, ge=1, le=50)):
 def popular_funds(limit: int = Query(default=6, ge=1, le=20)):
     """热门基金。"""
     return fund_service.popular(limit)
+
+
+@router.get("/recently-watched", response_model=list[FundSummary])
+def recently_watched():
+    """从持仓记录提取最近关注的基金（最多 6 只），返回 FundSummary。
+
+    数据流：
+    1. 读取 portfolio 活跃持仓 → 提取基金代码（去重，最多 6 个）
+    2. 从已缓存的基金列表 (_load_fund_list, TTL 1h) 匹配 FundSummary
+    3. 一次性返回，无 akshare 远程调用
+
+    不修改已有的 portfolio API。
+    """
+    # 从 portfolio 获取活跃持仓的基金代码（去重，最多 6 个）
+    try:
+        holdings = portfolio_service.list_holdings(include_sold=False)
+    except Exception:
+        holdings = []
+
+    seen: set[str] = set()
+    codes: list[str] = []
+    for h in holdings:
+        if h.fund_code not in seen:
+            seen.add(h.fund_code)
+            codes.append(h.fund_code)
+            if len(codes) >= 6:
+                break
+
+    if not codes:
+        return []
+
+    # 从缓存基金列表匹配 FundSummary（已在启动时预热，TTL 1 小时）
+    try:
+        all_funds = fund_service._load_fund_list()
+    except Exception:
+        return []
+
+    code_set = set(codes)
+    results = [f for f in all_funds if f.code in code_set]
+
+    # 保持与持仓顺序一致
+    results.sort(key=lambda f: codes.index(f.code) if f.code in codes else 999)
+
+    return results
 
 
 @router.get("/{code}", response_model=FundDetail)

@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException
 from models.analysis import (
     AICommentary,
     FundFlow,
+    HoldStructure,
     PeerComparison,
     PortfolioOverview,
     ReturnRanking,
@@ -41,6 +42,12 @@ def fund_peers(code: str):
 def fund_ranking(code: str):
     _ensure_exists(code)
     return analysis_service.ranking(code)
+
+
+@router.get("/hold-structure", response_model=HoldStructure)
+def get_hold_structure():
+    """全市场机构/个人持有比例趋势。"""
+    return analysis_service.hold_structure()
 
 
 @router.get("/portfolio", response_model=PortfolioOverview)

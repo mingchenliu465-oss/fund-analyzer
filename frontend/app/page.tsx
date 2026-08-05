@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { MetricCard } from "@/components/metric-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
@@ -32,9 +32,18 @@ import {
   getPortfolioOverview,
   getFundRankings,
   getRecentlyWatched,
-  listPopularFunds,
   searchFunds,
 } from "@/services/fund";
+
+// ── React Query staleTime 配置 ──
+
+const STALE_TIME = {
+  rankings: 30 * 60 * 1000,       // 基金排行榜：30 分钟（每日更新一次）
+  marketIndices: 2 * 60 * 1000,    // 市场指数：2 分钟（实时变动）
+  marketStatus: 5 * 60 * 1000,     // 市场状态：5 分钟（仅在开盘/午休/收盘时切换）
+  recentlyWatched: 5 * 60 * 1000,  // 最近关注：5 分钟（基于持仓变化）
+  portfolioOverview: 5 * 60 * 1000,// 组合总览：5 分钟（基于持仓 + 净值变化）
+} as const;
 
 const quickLinks = [
   {
@@ -67,24 +76,49 @@ const quickLinks = [
   },
 ];
 
+const emptyPortfolio: PortfolioOverviewData = {
+  totalAssets: 0, todayReturn: 0, todayReturnPct: 0,
+  cumulativeReturn: 0, cumulativeReturnPct: 0,
+  allocation: [], riskLevel: "暂无", riskScore: 0,
+};
+
 export default function HomePage() {
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<FundSummary[]>([]);
-  const [rankings, setRankings] = useState<FundSummary[]>([]);
-  const [recentWatched, setRecentWatched] = useState<FundSummary[]>([]);
-  const [marketIndices, setMarketIndices] = useState<MarketIndex[]>([]);
-  const [marketStatus, setMarketStatus] = useState<MarketStatus | null>(null);
-  const [portfolio, setPortfolio] = useState<PortfolioOverviewData | null>(null);
 
-  useEffect(() => {
-    getFundRankings(8).then(setRankings);
-    getRecentlyWatched().then(setRecentWatched);
-    getMarketIndices().then(setMarketIndices);
-    getMarketStatus().then(setMarketStatus);
-    getPortfolioOverview().then(setPortfolio);
-    // Keep popularFunds for search fallback if needed; currently unused.
-    listPopularFunds(6);
-  }, []);
+  // ── React Query: 数据请求自动缓存、去重、后台更新 ──
+
+  const { data: rankings = [] } = useQuery({
+    queryKey: ["rankings", 8],
+    queryFn: () => getFundRankings(8),
+    staleTime: STALE_TIME.rankings,
+  });
+
+  const { data: recentWatched = [] } = useQuery({
+    queryKey: ["recentlyWatched"],
+    queryFn: getRecentlyWatched,
+    staleTime: STALE_TIME.recentlyWatched,
+  });
+
+  const { data: marketIndices = [] } = useQuery({
+    queryKey: ["marketIndices"],
+    queryFn: getMarketIndices,
+    staleTime: STALE_TIME.marketIndices,
+  });
+
+  const { data: marketStatus = null } = useQuery<MarketStatus | null>({
+    queryKey: ["marketStatus"],
+    queryFn: getMarketStatus,
+    staleTime: STALE_TIME.marketStatus,
+  });
+
+  const { data: portfolio = emptyPortfolio } = useQuery<PortfolioOverviewData>({
+    queryKey: ["portfolioOverview"],
+    queryFn: getPortfolioOverview,
+    staleTime: STALE_TIME.portfolioOverview,
+  });
+
+  // ── 搜索（保留本地 state + 防抖，不缓存搜索结果）──
 
   useEffect(() => {
     if (!query.trim()) {
@@ -216,19 +250,31 @@ export default function HomePage() {
             <div>
               <h2 className="text-base font-semibold tracking-tight">我的组合总览</h2>
               <p className="text-xs text-muted-foreground">
-                {process.env.NEXT_PUBLIC_USE_REAL_API === "true"
-                  ? portfolio?.totalAssets ? "真实持仓数据" : "暂无持仓记录"
-                  : "示例账户 · 模拟数据"}
+                {portfolio.totalAssets > 0 ? "真实持仓数据" : "暂无持仓记录"}
               </p>
             </div>
             <Link href="/portfolio">
               <Button variant="outline" size="sm" className="h-8 rounded-lg px-3">
-                查看详情
+                {portfolio.totalAssets > 0 ? "查看详情" : "录入持仓"}
                 <ArrowRight className="ml-1 h-3 w-3" />
               </Button>
             </Link>
           </div>
-          {portfolio && <PortfolioOverview data={portfolio} />}
+          {portfolio.totalAssets > 0 ? (
+              <PortfolioOverview data={portfolio} />
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <PieChart className="mb-3 h-10 w-10 opacity-30" />
+                <p className="text-sm font-medium">暂无持仓数据</p>
+                <p className="mt-1 text-xs">前往投资组合页面录入真实交易</p>
+                <Link href="/portfolio" className="mt-3">
+                  <Button size="sm" className="h-8 rounded-lg px-3">
+                    开始录入
+                    <ArrowRight className="ml-1 h-3 w-3" />
+                  </Button>
+                </Link>
+              </div>
+            )}
         </motion.div>
 
         <motion.div
@@ -242,18 +288,25 @@ export default function HomePage() {
             <p className="text-xs text-muted-foreground">主要宽基指数收盘情况</p>
           </div>
           <div className="grid gap-2">
-            {marketIndices.map((item, index) => (
-              <MetricCard
-                key={item.name}
-                title={item.name}
-                value={item.value}
-                trend={item.up ? "up" : "down"}
-                trendValue={formatPercent(item.change * 0.01)}
-                subtitle="今日收盘"
-                icon={item.up ? TrendingUp : TrendingDown}
-                delay={0.45 + index * 0.05}
-              />
-            ))}
+            {marketIndices.length > 0 ? (
+              marketIndices.map((item, index) => (
+                <MetricCard
+                  key={item.name}
+                  title={item.name}
+                  value={item.value}
+                  trend={item.up ? "up" : "down"}
+                  trendValue={formatPercent(item.change * 0.01)}
+                  subtitle="今日收盘"
+                  icon={item.up ? TrendingUp : TrendingDown}
+                  delay={0.45 + index * 0.05}
+                />
+              ))
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                <p className="text-sm">暂无指数数据</p>
+                <p className="mt-1 text-xs">数据源暂时不可用</p>
+              </div>
+            )}
           </div>
         </motion.div>
       </section>

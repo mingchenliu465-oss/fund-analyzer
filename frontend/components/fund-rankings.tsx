@@ -9,6 +9,15 @@ interface FundRankingsProps {
 }
 
 export function FundRankings({ funds }: FundRankingsProps) {
+  if (funds.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+        <p className="text-sm">暂无排行数据</p>
+        <p className="mt-1 text-xs">数据源暂时不可用，请稍后重试</p>
+      </div>
+    );
+  }
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -23,9 +32,11 @@ export function FundRankings({ funds }: FundRankingsProps) {
           </tr>
         </thead>
         <tbody>
-          {funds.map((fund, index) => (
+          {funds.map((fund, index) => {
+            const ret = fund.oneYearReturn ?? 0;
+            return (
             <tr
-              key={fund.code}
+              key={fund.code || `fund-${index}`}
               className="border-b border-border last:border-0 transition-colors hover:bg-muted/40"
             >
               <td className="px-3 py-2.5">
@@ -39,23 +50,24 @@ export function FundRankings({ funds }: FundRankingsProps) {
               </td>
               <td className="px-3 py-2.5">
                 <Link href={`/fund/${fund.code}`} className="font-medium hover:text-accent">
-                  {fund.name}
+                  {fund.name ?? "—"}
                 </Link>
               </td>
               <td className="px-3 py-2.5 text-muted-foreground">{fund.code}</td>
-              <td className="px-3 py-2.5 text-muted-foreground">{fund.type}</td>
+              <td className="px-3 py-2.5 text-muted-foreground">{fund.type ?? "—"}</td>
               <td
                 className={`px-3 py-2.5 text-right font-medium tabular-nums ${
-                  fund.oneYearReturn >= 0 ? "text-positive" : "text-negative"
+                  ret >= 0 ? "text-positive" : "text-negative"
                 }`}
               >
-                {formatPercent(fund.oneYearReturn)}
+                {formatPercent(ret)}
               </td>
               <td className="px-3 py-2.5 text-right">
-                <Badge variant="outline">{fund.riskLevel}</Badge>
+                <Badge variant="outline">{fund.riskLevel ?? "—"}</Badge>
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

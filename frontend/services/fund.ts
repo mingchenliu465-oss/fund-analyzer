@@ -174,6 +174,26 @@ export interface RealPortfolioSummary {
   holdings: HoldingItem[];
 }
 
+export interface HoldStructurePoint {
+  date: string;
+  fundCount: number;
+  institutionPct: number;
+  individualPct: number;
+  internalPct: number;
+  totalShares: number;
+}
+
+export interface HoldStructure {
+  points: HoldStructurePoint[];
+  note: string;
+}
+
+export interface SellFormData {
+  sell_date: string;
+  sell_amount: number;
+  sell_nav: number;
+}
+
 export type NavPeriod = "5D" | "10D" | "20D" | "日K" | "周K" | "月K" | "年K" | "1M" | "3M" | "6M" | "1Y" | "3Y";
 
 const SECTOR_COLORS = [
@@ -200,15 +220,32 @@ export const KLINE_DOWN_COLOR = "#00a550";
 const USE_REAL_API = process.env.NEXT_PUBLIC_USE_REAL_API === "true";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
-async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+const DEFAULT_TIMEOUT_MS = 15000; // 15 秒超时
+
+async function fetchJson<T>(path: string, init?: RequestInit, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
   const url = `${API_BASE}${path}`;
-  const res = await fetch(url, { cache: "no-store", ...init });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`API ${path} returned ${res.status}: ${text}`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      ...init,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`API ${path} returned ${res.status}: ${text}`);
+    }
+    if (res.status === 204) return undefined as T;
+    return res.json() as Promise<T>;
+  } catch (err: unknown) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error(`请求超时（${timeoutMs / 1000}秒）: ${path}。请检查网络连接或关闭 VPN 后重试。`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
   }
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
 }
 
 // ---------------------------------------------------------------------------
@@ -564,8 +601,8 @@ function syntheticDetail(summary: FundSummary): FundDetail {
     },
     sectors: defaultSectors(summary.type),
     tags: [summary.type, styleForType(summary.type)],
-    description: `${summary.name}是一只${summary.type}基金，由${summary.company}管理。以上为模拟数据，仅用于前端展示。`,
-    manager: "基金经理（模拟）",
+    description: `${summary.name}是一只${summary.type}基金，由${summary.company}管理。部分字段为估算值，以基金公司官方数据为准。`,
+    manager: "暂无数据",
     rating: 3,
     topHoldings: defaultTopHoldings(summary.type),
     investmentStyle: styleForType(summary.type),
@@ -816,12 +853,10 @@ export async function getFundRankings(limit = 10): Promise<FundSummary[]> {
 }
 
 export async function getRecentlyWatched(): Promise<FundSummary[]> {
-  // 从 portfolio 持仓中取最近查看的基金代码
+  // 调用后端聚合接口：一次请求完成"持仓代码提取 + FundSummary 匹配"
+  // 后端从 portfolio 取持仓代码 → 去重 → 从缓存基金列表匹配 → 返回
   try {
-    const res = await fetchJson<{ holdings: { fund_code: string }[] }>("/api/portfolio/holdings");
-    const codes = [...new Set(res.holdings.map((h) => h.fund_code))].slice(0, 6);
-    const details = await Promise.all(codes.map((code) => getFundDetail(code)));
-    return details.filter((d): d is FundDetail => d !== null);
+    return await fetchJson<FundSummary[]>("/api/funds/recently-watched");
   } catch {
     return [];
   }
@@ -1005,6 +1040,27 @@ export async function sellHolding(id: number, data: { sell_date: string; sell_am
 
 export async function deleteHolding(id: number): Promise<void> {
   await fetchJson<void>(`/api/portfolio/holdings/${id}`, { method: "DELETE" });
+}
+
+export async function updateHolding(id: number, data: HoldingCreate): Promise<HoldingItem> {
+  return fetchJson<HoldingItem>(`/api/portfolio/holdings/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getAllHoldings(): Promise<HoldingItem[]> {
+  return fetchJson<HoldingItem[]>("/api/portfolio/holdings?include_sold=true");
+}
+
+export async function getHoldStructure(): Promise<HoldStructure> {
+  try {
+    return await fetchJson<HoldStructure>("/api/analysis/hold-structure");
+  } catch (err) {
+    console.warn("getHoldStructure failed:", err);
+    return { points: [], note: "数据加载失败" };
+  }
 }
 
 function riskLevelToVolatility(riskLevel: FundSummary["riskLevel"]): number {
