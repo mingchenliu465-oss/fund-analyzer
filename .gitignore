@@ -24,3 +24,8 @@ backend/.env
 
 # Claude
 .claude
+node_modules/
+.next/
+.env.local
+__pycache__/
+*.pyc
