@@ -24,6 +24,14 @@ backend/.env
 
 # Claude
 .claude
+
+# Local runtime state
+.venv/
+*.log
+backend/database/*.db
+backend/database/*.db-wal
+backend/database/*.db-shm
+.pytest_cache/
 node_modules/
 .next/
 .env.local

@@ -44,6 +44,7 @@ class DrawdownPoint(BaseModel):
 
 
 class MarketIndex(BaseModel):
+    code: str
     name: str
     value: str
     change: float

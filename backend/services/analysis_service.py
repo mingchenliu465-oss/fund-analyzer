@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
 import akshare as ak
@@ -72,41 +73,49 @@ def drawdown(code: str, period: NavPeriod = NavPeriod.ONE_YEAR) -> list[Drawdown
         date_format = "%Y-%m-%d"
 
     points: list[DrawdownPoint] = []
+    global_peak = 0.0
     for bucket, group in df.groupby("bucket", sort=True):
         nav_values = group["单位净值"].values
-        peak = nav_values[0]
         bucket_max_dd = 0.0
         for v in nav_values:
-            if v > peak:
-                peak = v
-            dd = (v - peak) / peak
-            if dd < bucket_max_dd:
-                bucket_max_dd = dd
+            if v > global_peak:
+                global_peak = v
+            if global_peak > 0:
+                dd = (v - global_peak) / global_peak
+                if dd < bucket_max_dd:
+                    bucket_max_dd = dd
         label = bucket.strftime(date_format)
         points.append(DrawdownPoint(date=label, drawdown=round(bucket_max_dd, 4)))
     return points
 
 
 def _load_rank_df() -> pd.DataFrame:
-    """加载开放式基金与场内 ETF 排名数据。"""
+    """加载开放式基金与场内 ETF 排名数据。
+
+    两个排行榜接口并行调用（原串行最坏 20s+）；两者都失败时回退默认快照
+    构建排名表，保证 peers/ranking 等分析接口不为空。
+    """
     cache_key = "rank_df"
     cached = fund_service._get_cache(cache_key)
     if cached is not None:
         return cached
 
-    try:
-        open_df = _call_akshare(ak.fund_open_fund_rank_em, timeout=10)
-        open_df = open_df[["基金代码", "基金简称", "近1年"]].copy()
-        open_df["source"] = "open"
-    except Exception:
-        open_df = pd.DataFrame(columns=["基金代码", "基金简称", "近1年", "source"])
+    with ThreadPoolExecutor(max_workers=2) as _ex:
+        _f_open = _ex.submit(_call_akshare, ak.fund_open_fund_rank_em, timeout=10)
+        _f_etf = _ex.submit(_call_akshare, ak.fund_exchange_rank_em, timeout=10)
+        try:
+            open_df = _f_open.result()
+            open_df = open_df[["基金代码", "基金简称", "近1年"]].copy()
+            open_df["source"] = "open"
+        except Exception:
+            open_df = pd.DataFrame(columns=["基金代码", "基金简称", "近1年", "source"])
 
-    try:
-        etf_df = _call_akshare(ak.fund_exchange_rank_em, timeout=10)
-        etf_df = etf_df[["基金代码", "基金简称", "近1年"]].copy()
-        etf_df["source"] = "etf"
-    except Exception:
-        etf_df = pd.DataFrame(columns=["基金代码", "基金简称", "近1年", "source"])
+        try:
+            etf_df = _f_etf.result()
+            etf_df = etf_df[["基金代码", "基金简称", "近1年"]].copy()
+            etf_df["source"] = "etf"
+        except Exception:
+            etf_df = pd.DataFrame(columns=["基金代码", "基金简称", "近1年", "source"])
 
     df = pd.concat([open_df, etf_df], ignore_index=True)
     df["近1年"] = pd.to_numeric(df["近1年"], errors="coerce")
@@ -114,6 +123,18 @@ def _load_rank_df() -> pd.DataFrame:
     df = df[df["近1年"].notna() & (df["近1年"] != 0)]
     df = df.drop_duplicates(subset=["基金代码"], keep="first")
     df = df.sort_values("近1年", ascending=False).reset_index(drop=True)
+
+    if df.empty:
+        # 排行榜数据源不可用：用默认快照构建排名表，避免分析接口为空
+        rows = [
+            {"基金代码": f.code, "基金简称": f.name, "近1年": f.one_year_return * 100, "source": "open"}
+            for f in fund_service._default_fund_list()
+            if f.one_year_return != 0
+        ]
+        df = pd.DataFrame(rows)
+        if not df.empty:
+            df = df.sort_values("近1年", ascending=False).reset_index(drop=True)
+
     fund_service._set_cache(cache_key, df, ttl=1800)
     return df
 

@@ -129,8 +129,6 @@ export default function ComparePage() {
     { key: "volatility" as const, label: "波动率", format: (v: number) => formatPercent(v) },
   ];
 
-  const hasData = funds.some((f) => f.detail !== null);
-
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
       {/* Header */}

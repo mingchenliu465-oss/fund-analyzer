@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MetricCard } from "@/components/metric-card";
 import { Button } from "@/components/ui/button";
@@ -21,9 +21,8 @@ import Link from "next/link";
 import { PortfolioOverview } from "@/components/portfolio-overview";
 import { FundRankings } from "@/components/fund-rankings";
 import { RecentWatched } from "@/components/recent-watched";
+import { useFundSearch } from "@/hooks/use-fund-search";
 import {
-  FundSummary,
-  MarketIndex,
   MarketStatus,
   PortfolioOverview as PortfolioOverviewData,
   formatPercent,
@@ -32,7 +31,6 @@ import {
   getPortfolioOverview,
   getFundRankings,
   getRecentlyWatched,
-  searchFunds,
 } from "@/services/fund";
 
 // ── React Query staleTime 配置 ──
@@ -41,7 +39,7 @@ const STALE_TIME = {
   rankings: 30 * 60 * 1000,       // 基金排行榜：30 分钟（每日更新一次）
   marketIndices: 2 * 60 * 1000,    // 市场指数：2 分钟（实时变动）
   marketStatus: 5 * 60 * 1000,     // 市场状态：5 分钟（仅在开盘/午休/收盘时切换）
-  recentlyWatched: 5 * 60 * 1000,  // 最近关注：5 分钟（基于持仓变化）
+  recentlyWatched: 0,              // 最近浏览：本地 localStorage，每次进入首页都读取最新
   portfolioOverview: 5 * 60 * 1000,// 组合总览：5 分钟（基于持仓 + 净值变化）
 } as const;
 
@@ -82,9 +80,18 @@ const emptyPortfolio: PortfolioOverviewData = {
   allocation: [], riskLevel: "暂无", riskScore: 0,
 };
 
+const MARKET_INDEX_CODE_BY_NAME: Record<string, string> = {
+  上证指数: "sh000001",
+  深证成指: "sz399001",
+  沪深300: "sh000300",
+  创业板指: "sz399006",
+  中证500: "sh000905",
+  中证全债: "H11001",
+};
+
 export default function HomePage() {
   const [query, setQuery] = useState("");
-  const [suggestions, setSuggestions] = useState<FundSummary[]>([]);
+  const { suggestions } = useFundSearch(query, 6);
 
   // ── React Query: 数据请求自动缓存、去重、后台更新 ──
 
@@ -117,19 +124,6 @@ export default function HomePage() {
     queryFn: getPortfolioOverview,
     staleTime: STALE_TIME.portfolioOverview,
   });
-
-  // ── 搜索（保留本地 state + 防抖，不缓存搜索结果）──
-
-  useEffect(() => {
-    if (!query.trim()) {
-      setSuggestions([]);
-      return;
-    }
-    const timer = setTimeout(() => {
-      searchFunds(query).then((results) => setSuggestions(results.slice(0, 6)));
-    }, 200);
-    return () => clearTimeout(timer);
-  }, [query]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
@@ -290,16 +284,22 @@ export default function HomePage() {
           <div className="grid gap-2">
             {marketIndices.length > 0 ? (
               marketIndices.map((item, index) => (
-                <MetricCard
+                <Link
                   key={item.name}
-                  title={item.name}
-                  value={item.value}
-                  trend={item.up ? "up" : "down"}
-                  trendValue={formatPercent(item.change * 0.01)}
-                  subtitle="今日收盘"
-                  icon={item.up ? TrendingUp : TrendingDown}
-                  delay={0.45 + index * 0.05}
-                />
+                  href={`/market/${item.code || MARKET_INDEX_CODE_BY_NAME[item.name]}`}
+                  aria-label={`查看${item.name}市场详情`}
+                  className="block rounded-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/20"
+                >
+                  <MetricCard
+                    title={item.name}
+                    value={item.value}
+                    trend={item.up ? "up" : "down"}
+                    trendValue={formatPercent(item.change * 0.01)}
+                    subtitle="今日收盘"
+                    icon={item.up ? TrendingUp : TrendingDown}
+                    delay={0.45 + index * 0.05}
+                  />
+                </Link>
               ))
             ) : (
               <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
@@ -342,8 +342,8 @@ export default function HomePage() {
           className="rounded-2xl border border-border bg-background p-4 sm:p-5"
         >
           <div className="mb-3">
-            <h2 className="text-base font-semibold tracking-tight">最近关注基金</h2>
-            <p className="text-xs text-muted-foreground">近期浏览过的基金</p>
+            <h2 className="text-base font-semibold tracking-tight">最近浏览</h2>
+            <p className="text-xs text-muted-foreground">近期查看过的基金</p>
           </div>
           <RecentWatched funds={recentWatched} />
         </motion.div>

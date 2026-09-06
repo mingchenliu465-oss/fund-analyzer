@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   createChart,
   CandlestickSeries,
@@ -20,7 +20,30 @@ import { KlinePoint, KLINE_UP_COLOR, KLINE_DOWN_COLOR } from "@/services/fund";
 
 interface KLineChartProps {
   data: KlinePoint[];
-  fundType?: string; // "ETF" → 蜡烛图+成交量; 其他 → 净值折线+均线
+  fundType?: string; // "ETF"/"指数" → 蜡烛图+成交量; 其他 → 净值折线+均线
+  chartMode?: "candlestick" | "line";
+  code?: string; // 基金代码，用于按代码前缀兜底判断是否场内 ETF
+  period?: string; // 当前聚合周期（日K/周K/月K），用于计算初始可见窗口
+  chartRange?: string; // 时间范围（1M/3M/6M/1Y/3Y），控制初始可见窗口
+}
+
+// 场内 ETF 代码前缀（与后端 fund_service._is_etf_code 保持一致，唯一真源）
+function isEtfCode(code: string | undefined): boolean {
+  if (!code) return false;
+  const c = code.trim();
+  if (c.length !== 6) return false;
+  return /^(51|56|58|15|16)/.test(c);
+}
+
+// 初始可见窗口条数：周期 × 时间范围 → 需显示的 bar 数（近似交易日）
+function visibleBarsFor(period: string | undefined, range: string | undefined): number {
+  const map: Record<string, Record<string, number>> = {
+    日K: { "1M": 22, "3M": 66, "6M": 130, "1Y": 250, "3Y": 750 },
+    周K: { "1M": 5, "3M": 13, "6M": 26, "1Y": 52, "3Y": 156 },
+    月K: { "1M": 1, "3M": 3, "6M": 6, "1Y": 12, "3Y": 36 },
+  };
+  const per = map[period ?? "日K"] ?? map["日K"];
+  return per[range ?? "1Y"] ?? 250;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -51,13 +74,13 @@ function normalizeDate(dateStr: string, fallbackYear: number): string {
   if (!trimmed) return "";
   // yyyy-MM-dd
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    const [y, m, d] = trimmed.split("-").map(Number);
+    const [, m, d] = trimmed.split("-").map(Number);
     if (m >= 1 && m <= 12 && d >= 1 && d <= 31) return trimmed;
     return "";
   }
   // yyyy-MM → yyyy-MM-01
   if (/^\d{4}-\d{2}$/.test(trimmed)) {
-    const [y, m] = trimmed.split("-").map(Number);
+    const [, m] = trimmed.split("-").map(Number);
     if (m >= 1 && m <= 12) return `${trimmed}-01`;
     return "";
   }
@@ -88,12 +111,32 @@ function computeMA(values: number[], period: number): (number | null)[] {
 // Component
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export function KLineChart({ data, fundType }: KLineChartProps) {
-  const isETF = fundType === "ETF";
+export function KLineChart({ data, fundType, chartMode, code, period, chartRange }: KLineChartProps) {
+  // 统一以代码前缀判断是否场内 ETF（不依赖 type 字段，数据源可能误标）。
+  // 同时兼容显式 type="ETF"（如默认快照里已标 ETF 的基金）。
+  const isETF = chartMode
+    ? chartMode === "candlestick"
+    : isEtfCode(code) || fundType === "ETF" || fundType === "指数";
+  const lineLabel = fundType?.includes("指数") ? "指数" : "净值";
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   // Track all series so we can remove them before adding new ones
   const seriesRefs = useRef<ISeriesApi<SeriesType>[]>([]);
+  // 当前已加载的数据条数，供 range 变化时设置可视窗口（不重建 series）
+  const dataLengthRef = useRef(0);
+
+  const applyVisibleRange = useCallback(
+    (chart: IChartApi) => {
+      const n = dataLengthRef.current;
+      if (n === 0) return;
+      const bars = visibleBarsFor(period, chartRange);
+      chart.timeScale().setVisibleLogicalRange({
+        from: Math.max(0, n - bars),
+        to: n + 0.5,
+      });
+    },
+    [period, chartRange]
+  );
 
   // ── Init chart (recreated when fundType changes) ──────────────────────
   useEffect(() => {
@@ -191,7 +234,13 @@ export function KLineChart({ data, fundType }: KLineChartProps) {
 
     if (isETF) {
       // ── ETF 模式：真实 K 线 + 成交量 ──
-      const candles = deduped.map(({ _epoch, _volume, ...rest }) => rest);
+      const candles = deduped.map(({ time, open, high, low, close }) => ({
+        time,
+        open,
+        high,
+        low,
+        close,
+      }));
 
       const candleSeries = chart.addSeries(CandlestickSeries, CANDLESTICK_OPTIONS);
       candleSeries.priceScale().applyOptions({ scaleMargins: { top: 0.1, bottom: 0.25 } });
@@ -218,9 +267,9 @@ export function KLineChart({ data, fundType }: KLineChartProps) {
       seriesRefs.current.push(volumeSeries);
 
       // MA 均线（叠加在 K 线图上）
-      const ma5Data = candles.map((c, i) => ({ time: c.time, value: ma5[i]! })).filter((d) => d.value != null);
-      const ma10Data = candles.map((c, i) => ({ time: c.time, value: ma10[i]! })).filter((d) => d.value != null);
-      const ma20Data = candles.map((c, i) => ({ time: c.time, value: ma20[i]! })).filter((d) => d.value != null);
+      const ma5Data = candles.map((c, i) => ({ time: c.time, value: ma5[i] })).filter((d): d is { time: Time; value: number } => d.value != null);
+      const ma10Data = candles.map((c, i) => ({ time: c.time, value: ma10[i] })).filter((d): d is { time: Time; value: number } => d.value != null);
+      const ma20Data = candles.map((c, i) => ({ time: c.time, value: ma20[i] })).filter((d): d is { time: Time; value: number } => d.value != null);
 
       if (ma5Data.length >= 5) {
         const s = chart.addSeries(LineSeries, { color: MA_COLORS.ma5, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
@@ -253,9 +302,9 @@ export function KLineChart({ data, fundType }: KLineChartProps) {
 
       // MA 均线
       const times = deduped.map((d) => d.time);
-      const ma5Data = times.map((t, i) => ({ time: t, value: ma5[i]! })).filter((d) => d.value != null);
-      const ma10Data = times.map((t, i) => ({ time: t, value: ma10[i]! })).filter((d) => d.value != null);
-      const ma20Data = times.map((t, i) => ({ time: t, value: ma20[i]! })).filter((d) => d.value != null);
+      const ma5Data = times.map((t, i) => ({ time: t, value: ma5[i] })).filter((d): d is { time: Time; value: number } => d.value != null);
+      const ma10Data = times.map((t, i) => ({ time: t, value: ma10[i] })).filter((d): d is { time: Time; value: number } => d.value != null);
+      const ma20Data = times.map((t, i) => ({ time: t, value: ma20[i] })).filter((d): d is { time: Time; value: number } => d.value != null);
 
       if (ma5Data.length >= 5) {
         const s = chart.addSeries(LineSeries, { color: MA_COLORS.ma5, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
@@ -274,8 +323,17 @@ export function KLineChart({ data, fundType }: KLineChartProps) {
       }
     }
 
-    chart.timeScale().fitContent();
-  }, [data, isETF]);
+    // 保存数据条数并设置初始可见窗口（按周期×时间范围显示最近一段，而非 fitContent 显示全部）
+    dataLengthRef.current = deduped.length;
+    applyVisibleRange(chart);
+  }, [data, isETF, applyVisibleRange]);
+
+  // ── 时间范围变化：仅调整可视窗口，不重建 series、不强制覆盖用户缩放 ──
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || dataLengthRef.current === 0) return;
+    applyVisibleRange(chart);
+  }, [applyVisibleRange]);
 
   // ── Empty state ───────────────────────────────────────────────────────
   if (!data || data.length === 0) {
@@ -302,7 +360,7 @@ export function KLineChart({ data, fundType }: KLineChartProps) {
           </>
         ) : (
           <>
-            <span style={{ color: "#0071e3", fontWeight: 600 }}>净值</span>
+            <span style={{ color: "#0071e3", fontWeight: 600 }}>{lineLabel}</span>
             <span style={{ color: MA_COLORS.ma5 }}>MA5</span>
             <span style={{ color: MA_COLORS.ma10 }}>MA10</span>
             <span style={{ color: MA_COLORS.ma20 }}>MA20</span>

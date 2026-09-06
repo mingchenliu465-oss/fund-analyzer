@@ -18,6 +18,14 @@ interface PeerComparisonProps {
 }
 
 export function PeerComparison({ data, targetCode }: PeerComparisonProps) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
+        暂无同类对比数据
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="h-[260px] w-full">

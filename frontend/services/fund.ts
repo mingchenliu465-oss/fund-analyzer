@@ -90,11 +90,21 @@ export interface DrawdownPoint {
 }
 
 export interface MarketIndex {
+  code: string;
   name: string;
   value: string;
   change: number;
   up: boolean;
 }
+
+const MARKET_INDEX_CODE_BY_NAME: Record<string, string> = {
+  上证指数: "sh000001",
+  深证成指: "sz399001",
+  沪深300: "sh000300",
+  创业板指: "sz399006",
+  中证500: "sh000905",
+  中证全债: "H11001",
+};
 
 export interface PeerComparison {
   code: string;
@@ -124,7 +134,7 @@ export interface PortfolioOverview {
 }
 
 export interface MarketStatus {
-  status: "交易中" | "已收盘" | "未开盘";
+  status: "交易中" | "已收盘" | "未开盘" | "午间休市";
   session: string;
   updateTime: string;
 }
@@ -172,6 +182,54 @@ export interface RealPortfolioSummary {
   total_profit_pct: number;
   holding_count: number;
   holdings: HoldingItem[];
+  has_stale_nav: boolean;
+}
+
+export interface PortfolioHistoryPoint {
+  date: string;
+  total_value: number;
+  total_cost: number;
+  profit: number;
+  profit_rate: number;
+}
+
+export type PortfolioHistoryPeriod = "1W" | "1M" | "3M" | "1Y" | "ALL";
+
+export interface AttributionContribution {
+  fund_type: string;
+  current_value: number;
+  nav_stale: boolean;
+  fund_code: string;
+  fund_name: string;
+  shares: number;
+  nav: number;
+  prev_nav: number;
+  change_pct: number;
+  contribution: number;
+  contribution_rate: number;
+}
+
+export interface AttributionSummary {
+  has_stale_nav: boolean;
+  total_assets: number;
+  today_return: number;
+  today_return_pct: number;
+  holding_count: number;
+  gainers_count: number;
+  losers_count: number;
+  top_gainer_name: string | null;
+  top_loser_name: string | null;
+  note: string;
+}
+
+export interface AttributionResult {
+  today_return: number;
+  today_return_pct: number;
+  yesterday_value: number;
+  summary: AttributionSummary;
+  contributions: AttributionContribution[];
+  top_gainer: AttributionContribution | null;
+  top_loser: AttributionContribution | null;
 }
 
 export interface HoldStructurePoint {
@@ -220,7 +278,10 @@ export const KLINE_DOWN_COLOR = "#00a550";
 const USE_REAL_API = process.env.NEXT_PUBLIC_USE_REAL_API === "true";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
 
-const DEFAULT_TIMEOUT_MS = 15000; // 15 秒超时
+const DEFAULT_TIMEOUT_MS = 30000; // 30 秒超时（后端 akshare 冷启动可能较慢，15s 偏紧）
+const FAST_READ_TIMEOUT_MS = 2500;
+const DETAIL_TIMEOUT_MS = 8000;
+const MARKET_TIMEOUT_MS = 20000;
 
 async function fetchJson<T>(path: string, init?: RequestInit, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
   const url = `${API_BASE}${path}`;
@@ -725,12 +786,15 @@ function generateDrawdownHistory(fund: FundDetail, period: NavPeriod): DrawdownP
 export async function searchFunds(query: string): Promise<FundSummary[]> {
   if (USE_REAL_API) {
     try {
-      return await fetchJson<FundSummary[]>(`/api/funds/search?q=${encodeURIComponent(query.trim())}`);
+      return await fetchJson<FundSummary[]>(
+        `/api/funds/search?q=${encodeURIComponent(query.trim())}`,
+        undefined,
+        FAST_READ_TIMEOUT_MS
+      );
     } catch (err) {
       console.warn("searchFunds API failed, fallback to mock", err);
     }
   }
-  await new Promise((r) => setTimeout(r, 120));
   const q = query.trim().toLowerCase();
   if (!q) return [];
   return FUND_POOL.filter(
@@ -763,12 +827,15 @@ export async function getAllFunds(query?: string): Promise<FundSummary[]> {
 export async function getFundDetail(code: string): Promise<FundDetail | null> {
   if (USE_REAL_API) {
     try {
-      return await fetchJson<FundDetail>(`/api/funds/${encodeURIComponent(code.trim().toUpperCase())}`);
+      return await fetchJson<FundDetail>(
+        `/api/funds/${encodeURIComponent(code.trim().toUpperCase())}`,
+        undefined,
+        DETAIL_TIMEOUT_MS
+      );
     } catch (err) {
       console.warn("getFundDetail API failed, fallback to mock", err);
     }
   }
-  await new Promise((r) => setTimeout(r, 180));
   const upper = code.trim().toUpperCase();
   if (FUND_DETAILS[upper]) return FUND_DETAILS[upper];
   const summary = FUND_POOL.find((f) => f.code === upper);
@@ -801,10 +868,30 @@ export async function getFundKlineHistory(
 ): Promise<KlinePoint[]> {
   try {
     return await fetchJson<KlinePoint[]>(
-      `/api/market/kline?code=${encodeURIComponent(code.trim().toUpperCase())}&period=${period}`
+      `/api/market/kline?code=${encodeURIComponent(
+        code.trim().toUpperCase()
+      )}&period=${period}`,
+      undefined,
+      DETAIL_TIMEOUT_MS
     );
   } catch (err) {
     console.warn("getFundKlineHistory failed:", err);
+    return [];
+  }
+}
+
+export async function getMarketIndexKlineHistory(
+  code: string,
+  period: NavPeriod = "日K"
+): Promise<KlinePoint[]> {
+  try {
+    return await fetchJson<KlinePoint[]>(
+      `/api/market/indices/${encodeURIComponent(code.trim())}/kline?period=${encodeURIComponent(period)}`,
+      undefined,
+      MARKET_TIMEOUT_MS
+    );
+  } catch (err) {
+    console.warn("getMarketIndexKlineHistory failed:", err);
     return [];
   }
 }
@@ -816,7 +903,9 @@ export async function getFundDrawdownHistory(
   if (USE_REAL_API) {
     try {
       return await fetchJson<DrawdownPoint[]>(
-        `/api/analysis/drawdown/${encodeURIComponent(code.trim().toUpperCase())}?period=${period}`
+        `/api/analysis/drawdown/${encodeURIComponent(code.trim().toUpperCase())}?period=${period}`,
+        undefined,
+        DETAIL_TIMEOUT_MS
       );
     } catch (err) {
       console.warn("getFundDrawdownHistory API failed, fallback to mock", err);
@@ -843,51 +932,80 @@ export async function listPopularFunds(limit = 6): Promise<FundSummary[]> {
 export async function getFundRankings(limit = 10): Promise<FundSummary[]> {
   if (USE_REAL_API) {
     try {
-      return await fetchJson<FundSummary[]>(`/api/funds/rankings?limit=${limit}`);
+      return await fetchJson<FundSummary[]>(
+        `/api/funds/rankings?limit=${limit}`,
+        undefined,
+        FAST_READ_TIMEOUT_MS
+      );
     } catch (err) {
       console.warn("getFundRankings API failed, fallback to mock", err);
     }
   }
-  await new Promise((r) => setTimeout(r, 100));
   return [...FUND_POOL].sort((a, b) => b.oneYearReturn - a.oneYearReturn).slice(0, limit);
 }
 
-export async function getRecentlyWatched(): Promise<FundSummary[]> {
-  // 调用后端聚合接口：一次请求完成"持仓代码提取 + FundSummary 匹配"
-  // 后端从 portfolio 取持仓代码 → 去重 → 从缓存基金列表匹配 → 返回
+// ── 最近浏览（本地 localStorage，替代后端"最近关注=持仓"的误导逻辑）──
+
+const RECENT_WATCHED_KEY = "fund_analyzer_recent_watched";
+const RECENT_WATCHED_MAX = 6;
+
+export function getBrowsedFunds(): FundSummary[] {
+  if (typeof window === "undefined") return [];
   try {
-    return await fetchJson<FundSummary[]>("/api/funds/recently-watched");
+    const raw = window.localStorage.getItem(RECENT_WATCHED_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as FundSummary[]) : [];
   } catch {
     return [];
   }
 }
 
+export function recordBrowsedFund(fund: FundSummary): void {
+  if (typeof window === "undefined") return;
+  try {
+    const existing = getBrowsedFunds().filter((f) => f.code !== fund.code);
+    existing.unshift(fund);
+    window.localStorage.setItem(
+      RECENT_WATCHED_KEY,
+      JSON.stringify(existing.slice(0, RECENT_WATCHED_MAX))
+    );
+  } catch {
+    // localStorage 不可用（隐私模式等）时静默忽略
+  }
+}
+
+export async function getRecentlyWatched(): Promise<FundSummary[]> {
+  // 最近浏览 = 用户在详情页查看过的基金（本地记录），而非持仓。
+  return getBrowsedFunds();
+}
+
 export async function getMarketIndices(): Promise<MarketIndex[]> {
   if (USE_REAL_API) {
     try {
-      return await fetchJson<MarketIndex[]>("/api/market/indices");
+      const rows = await fetchJson<(Omit<MarketIndex, "code"> & { code?: string })[]>(
+        "/api/market/indices",
+        undefined,
+        MARKET_TIMEOUT_MS
+      );
+      return rows.map((item) => ({
+        ...item,
+        code: item.code || MARKET_INDEX_CODE_BY_NAME[item.name] || "",
+      }));
     } catch (err) {
       console.warn("getMarketIndices API failed, fallback to mock", err);
     }
   }
-  await new Promise((r) => setTimeout(r, 80));
   return [
-    { name: "沪深300", value: "3,842.15", change: 1.24, up: true },
-    { name: "中证500", value: "5,621.38", change: 0.86, up: true },
-    { name: "创业板指", value: "2,018.72", change: -0.34, up: false },
-    { name: "中证全债", value: "245.18", change: 0.05, up: true },
+    { code: "sh000300", name: "沪深300", value: "3,842.15", change: 1.24, up: true },
+    { code: "sh000905", name: "中证500", value: "5,621.38", change: 0.86, up: true },
+    { code: "sz399006", name: "创业板指", value: "2,018.72", change: -0.34, up: false },
+    { code: "H11001", name: "中证全债", value: "245.18", change: 0.05, up: true },
   ];
 }
 
 export async function getMarketStatus(): Promise<MarketStatus> {
-  if (USE_REAL_API) {
-    try {
-      return await fetchJson<MarketStatus>("/api/market/status");
-    } catch (err) {
-      console.warn("getMarketStatus API failed, fallback to mock", err);
-    }
-  }
-  await new Promise((r) => setTimeout(r, 60));
+  // 交易时段是确定的本地规则，无需为它增加一次网络往返。
   const now = new Date();
   const hour = now.getHours();
   const minute = now.getMinutes();
@@ -974,7 +1092,11 @@ function transformPortfolioToOverview(summary: RealPortfolioSummary): PortfolioO
 export async function getPortfolioOverview(): Promise<PortfolioOverview> {
   if (USE_REAL_API) {
     try {
-      const summary = await fetchJson<RealPortfolioSummary>("/api/portfolio");
+      const summary = await fetchJson<RealPortfolioSummary>(
+        "/api/portfolio",
+        undefined,
+        DETAIL_TIMEOUT_MS
+      );
       return transformPortfolioToOverview(summary);
     } catch (err) {
       console.warn("getPortfolioOverview failed:", err);
@@ -991,7 +1113,9 @@ export async function getPeerComparison(code: string): Promise<PeerComparison[]>
   if (USE_REAL_API) {
     try {
       return await fetchJson<PeerComparison[]>(
-        `/api/analysis/peers/${encodeURIComponent(code.trim().toUpperCase())}`
+        `/api/analysis/peers/${encodeURIComponent(code.trim().toUpperCase())}`,
+        undefined,
+        DETAIL_TIMEOUT_MS
       );
     } catch (err) {
       console.warn("getPeerComparison API failed, fallback to mock", err);
@@ -1019,7 +1143,79 @@ export async function getPeerComparison(code: string): Promise<PeerComparison[]>
 // ── 真实持仓 API ──
 
 export async function getRealPortfolio(): Promise<RealPortfolioSummary> {
-  return fetchJson<RealPortfolioSummary>("/api/portfolio");
+  return fetchJson<RealPortfolioSummary>("/api/portfolio", undefined, DETAIL_TIMEOUT_MS);
+}
+
+export async function getPortfolioHistory(
+  period: PortfolioHistoryPeriod = "1M"
+): Promise<PortfolioHistoryPoint[]> {
+  try {
+    const res = await fetchJson<{ points: PortfolioHistoryPoint[] }>(
+      `/api/portfolio/history?period=${period}`
+    );
+    return res.points ?? [];
+  } catch (err) {
+    console.warn("getPortfolioHistory failed:", err);
+    return [];
+  }
+}
+
+export async function getPortfolioAttribution(): Promise<AttributionResult | null> {
+  try {
+    return await fetchJson<AttributionResult>("/api/portfolio/attribution");
+  } catch (err) {
+    console.warn("getPortfolioAttribution failed:", err);
+    return null;
+  }
+}
+
+// ── 自动定投 ──
+export interface DripCreateInput {
+  fund_code: string;
+  fund_name: string;
+  fund_type?: string;
+  amount: number;
+  frequency: "daily" | "weekly" | "monthly";
+  start_date: string;
+  end_date: string;
+  day_of_week?: number;
+  fee?: number;
+  notes?: string;
+}
+
+export interface DripResult {
+  created: number;
+  items: HoldingItem[];
+  skipped: { date: string; reason: string }[];
+}
+
+export async function autoDrip(data: DripCreateInput): Promise<DripResult> {
+  return fetchJson<DripResult>("/api/portfolio/auto-drip", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+export interface DailyReviewSegment {
+  type: string;
+  text: string;
+}
+
+export interface DailyReview {
+  date: string;
+  provider: "llm" | "rules";
+  segments: DailyReviewSegment[];
+  summary: string;
+}
+
+export async function getDailyReview(): Promise<DailyReview | null> {
+  try {
+    return await fetchJson<DailyReview>("/api/review/daily");
+  } catch (err) {
+    console.warn("getDailyReview failed:", err);
+    return null;
+  }
 }
 
 export async function createHolding(data: HoldingCreate): Promise<HoldingItem> {
@@ -1056,7 +1252,11 @@ export async function getAllHoldings(): Promise<HoldingItem[]> {
 
 export async function getHoldStructure(): Promise<HoldStructure> {
   try {
-    return await fetchJson<HoldStructure>("/api/analysis/hold-structure");
+    return await fetchJson<HoldStructure>(
+      "/api/analysis/hold-structure",
+      undefined,
+      DETAIL_TIMEOUT_MS
+    );
   } catch (err) {
     console.warn("getHoldStructure failed:", err);
     return { points: [], note: "数据加载失败" };
@@ -1084,7 +1284,9 @@ export async function getReturnRanking(code: string): Promise<ReturnRanking> {
   if (USE_REAL_API) {
     try {
       return await fetchJson<ReturnRanking>(
-        `/api/analysis/ranking/${encodeURIComponent(code.trim().toUpperCase())}`
+        `/api/analysis/ranking/${encodeURIComponent(code.trim().toUpperCase())}`,
+        undefined,
+        DETAIL_TIMEOUT_MS
       );
     } catch (err) {
       console.warn("getReturnRanking API failed, fallback to mock", err);

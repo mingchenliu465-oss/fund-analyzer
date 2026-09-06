@@ -12,6 +12,7 @@ import {
   Briefcase,
   FileText,
   Lightbulb,
+  Sparkles,
   Target,
   TrendingUp,
   Trophy,
@@ -27,9 +28,11 @@ import {
   YAxis,
 } from "recharts";
 import {
+  DailyReview,
   HoldingItem,
   RealPortfolioSummary,
   getAllHoldings,
+  getDailyReview,
   getRealPortfolio,
   formatCurrency,
   formatPercent,
@@ -40,10 +43,9 @@ export default function ReviewPage() {
   const [allHoldings, setAllHoldings] = useState<HoldingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dailyReview, setDailyReview] = useState<DailyReview | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
     Promise.all([
       getRealPortfolio().catch(() => null),
       getAllHoldings().catch(() => [] as HoldingItem[]),
@@ -56,6 +58,7 @@ export default function ReviewPage() {
         setError(err instanceof Error ? err.message : "加载失败");
       })
       .finally(() => setLoading(false));
+    getDailyReview().then(setDailyReview);
   }, []);
 
   // ── Derived data ──
@@ -63,7 +66,6 @@ export default function ReviewPage() {
   const activeHoldings = (portfolio?.holdings ?? []).filter((h) => !h.is_sold);
   const soldHoldings = allHoldings.filter((h) => h.is_sold);
   const totalValue = portfolio?.total_value ?? 0;
-  const totalCost = portfolio?.total_cost ?? 0;
   const totalProfit = portfolio?.total_profit ?? 0;
   const totalProfitPct = portfolio?.total_profit_pct ?? 0;
   const hasData = activeHoldings.length > 0 || soldHoldings.length > 0;
@@ -235,6 +237,49 @@ export default function ReviewPage() {
           基于真实持仓数据的投资表现回顾
         </motion.p>
       </section>
+
+      {/* AI 每日复盘 */}
+      <motion.section
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.12, ease: [0.23, 1, 0.32, 1] }}
+        className="mb-8"
+      >
+        <div className="rounded-2xl border border-border bg-background p-4 sm:p-5">
+          <div className="mb-3 flex items-start justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-accent" />
+                <h3 className="text-base font-semibold tracking-tight">AI 每日复盘</h3>
+                <Badge variant="outline" className="text-[10px]">
+                  {dailyReview?.provider === "llm" ? "智能生成" : "自动生成"}
+                </Badge>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {dailyReview?.date ? `${dailyReview.date} · ` : ""}
+                基于你的真实持仓与今日收益归因自动生成，仅供参考
+              </p>
+            </div>
+          </div>
+          {dailyReview && dailyReview.segments.length > 0 ? (
+            <div className="space-y-2.5">
+              {dailyReview.segments.map((seg, i) => (
+                <div
+                  key={i}
+                  className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/20 px-3 py-2.5 text-sm"
+                >
+                  <span className="mt-0.5 shrink-0 rounded-md bg-muted px-1.5 text-[10px] font-medium text-muted-foreground">
+                    {seg.type}
+                  </span>
+                  <span className="leading-relaxed text-foreground/90">{seg.text}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">暂无复盘内容。</p>
+          )}
+        </div>
+      </motion.section>
 
       {/* Metrics cards */}
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -411,7 +456,7 @@ export default function ReviewPage() {
                 </tr>
               </thead>
               <tbody>
-                {allHoldings.slice(0, 20).map((h, i) => {
+                {allHoldings.slice(0, 20).map((h) => {
                   const profit = h.is_sold
                     ? (h.sell_amount ?? 0) - (h.cost ?? 0)
                     : h.profit ?? 0;

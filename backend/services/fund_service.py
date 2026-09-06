@@ -12,7 +12,7 @@ import logging
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime, timedelta
-from threading import Thread
+from threading import Lock, Thread
 from typing import Any, Callable, TypeVar
 
 import akshare as ak
@@ -50,7 +50,7 @@ def _set_cache(key: str, value: Any, ttl: int = _DEFAULT_TTL_SECONDS) -> None:
 # Timeout wrapper for akshare calls (prevents VPN/proxy hangs)
 # -----------------------------------------------------------------------------
 
-_AKSHARE_TIMEOUT = 12  # akshare 单次调用超时秒数（VPN/慢网络下可能需要更长时间）
+_AKSHARE_TIMEOUT = 6  # 交互请求快速失败并回退缓存，避免页面长时间无响应
 
 _AkExecute = TypeVar("_AkExecute")
 
@@ -118,6 +118,11 @@ _DEFAULT_FUND_CODES = [
 
 _FUND_LIST_SNAPSHOT: list[FundSummary] | None = None
 
+# 基金列表加载锁：warmup 与并发请求同时触发时会重复调用慢接口（fund_name_em
+# 实测 16s+），导致双双超时回退默认快照。用锁实现单飞（single-flight），
+# 并发调用排队等待，第一个加载完成后其余直接命中缓存。
+_FUND_LIST_LOCK = Lock()
+
 
 def _build_enrichment_lookup() -> dict[str, dict[str, float]]:
     """从 akshare 排行榜获取真实净值/收益率数据，构建 code → 数据的查找表。
@@ -130,7 +135,7 @@ def _build_enrichment_lookup() -> dict[str, dict[str, float]]:
 
     lookup: dict[str, dict[str, float]] = {}
     try:
-        df = _call_akshare(ak.fund_open_fund_rank_em)
+        df = _call_akshare(_open_rank_frame, timeout=30)
         for _, row in df.iterrows():
             code = str(row.get("基金代码", "")).strip()
             if not code:
@@ -156,43 +161,56 @@ def _load_fund_list() -> list[FundSummary]:
     if cached is not None:
         return cached
 
-    try:
-        df = _call_akshare(ak.fund_name_em)
-        df = df.drop_duplicates(subset=["基金代码"], keep="first")
+    with _FUND_LIST_LOCK:
+        # 双重检查：排队等待期间可能已被其他线程（含启动预热）加载完成
+        cached = _get_cache("fund_list")
+        if cached is not None:
+            return cached
 
-        # 尝试加载真实净值/收益率数据
-        enrichment = _build_enrichment_lookup()
+        try:
+            # fund_name_em 全市场列表较大（实测 16s+），默认 12s 超时会被误掐断导致
+            # 只能回退默认快照；这里单独放宽到 45s，并与排行榜丰富数据并行获取，
+            # 冷启动总耗时趋近最慢的一个请求而不是两者之和。
+            with ThreadPoolExecutor(max_workers=2) as _ex:
+                _f_list = _ex.submit(_call_akshare, ak.fund_name_em, timeout=45)
+                _f_enrich = _ex.submit(_build_enrichment_lookup)
+                df = _f_list.result()
+                enrichment = _f_enrich.result()
 
-        funds: list[FundSummary] = []
-        for _, row in df.iterrows():
-            code = str(row["基金代码"]).strip()
-            name = str(row["基金简称"]).strip()
-            ftype = str(row["基金类型"]).strip()
-            enriched = enrichment.get(code, {})
+            df = df.drop_duplicates(subset=["基金代码"], keep="first")
 
-            funds.append(
-                FundSummary(
-                    code=code,
-                    name=name,
-                    company=_extract_company(name),
-                    type=_simplify_type(ftype),
-                    nav=round(enriched.get("nav", 0.0), 4),
-                    change_pct=round(enriched.get("change_pct", 0.0), 2),
-                    one_year_return=round(enriched.get("one_year_return", 0.0), 4),
-                    risk_level=_risk_level_for_type(ftype),
-                    size="-",
-                    heat=_heat_score(name, ftype),
+            funds: list[FundSummary] = []
+            for _, row in df.iterrows():
+                code = str(row["基金代码"]).strip()
+                name = str(row["基金简称"]).strip()
+                raw_ftype = str(row["基金类型"]).strip()
+                enriched = enrichment.get(code, {})
+                # 场内 ETF 用代码前缀覆盖类型，避免数据源误标为"股票型"
+                ftype = "ETF" if _is_etf_code(code) else _simplify_type(raw_ftype)
+
+                funds.append(
+                    FundSummary(
+                        code=code,
+                        name=name,
+                        company=_extract_company(name),
+                        type=ftype,
+                        nav=round(enriched.get("nav", 0.0), 4),
+                        change_pct=round(enriched.get("change_pct", 0.0), 2),
+                        one_year_return=round(enriched.get("one_year_return", 0.0), 4),
+                        risk_level=_risk_level_for_type(ftype),
+                        size="-",
+                        heat=_heat_score(name, ftype),
+                    )
                 )
-            )
-        _set_cache("fund_list", funds, _LIST_TTL_SECONDS)
-        enriched_count = sum(1 for f in funds if f.nav > 0)
-        logger.info("Fund list loaded: %d total, %d enriched with real data", len(funds), enriched_count)
-        return funds
-    except Exception as exc:
-        logger.warning("akshare fund_name_em failed: %s, using default snapshot", exc)
-        default = _default_fund_list()
-        _set_cache("fund_list", default, ttl=600)  # 失败时缓存回退列表 10 分钟，避免重复超时
-        return default
+            _set_cache("fund_list", funds, _LIST_TTL_SECONDS)
+            enriched_count = sum(1 for f in funds if f.nav > 0)
+            logger.info("Fund list loaded: %d total, %d enriched with real data", len(funds), enriched_count)
+            return funds
+        except Exception as exc:
+            logger.warning("akshare fund_name_em failed: %s, using default snapshot", exc)
+            default = _default_fund_list()
+            _set_cache("fund_list", default, ttl=600)  # 失败时缓存回退列表 10 分钟，避免重复超时
+            return default
 
 
 def _default_fund_list() -> list[FundSummary]:
@@ -259,6 +277,21 @@ def _simplify_type(raw: str) -> str:
     if "股票" in raw:
         return "股票型"
     return "混合型"
+
+
+def _is_etf_code(code: str) -> bool:
+    """按代码前缀判断是否为场内 ETF（唯一真源，不依赖数据源的类型字段）。
+
+    数据源（fund_name_em 等）常把场内 ETF 标为"股票型"，导致前端无法按
+    type=ETF 进入 K 线逻辑。统一用代码前缀作为确定性判断。
+        上海 ETF：51 / 56 / 58 开头
+        深圳 ETF：15 / 16 开头
+    六位代码才有效。
+    """
+    code = str(code).strip()
+    if len(code) != 6:
+        return False
+    return code.startswith(("51", "56", "58", "15", "16"))
 
 
 def _risk_level_for_type(raw: str) -> str:
@@ -833,32 +866,77 @@ def _type_from_name_list(code: str) -> str:
     return f.type if f else "混合型"
 
 
+_RANKINGS_LOCK = Lock()
+_RANKINGS_RETRY_AT = 0.0
+_OPEN_RANK_LOCK = Lock()
+
+
+def _open_rank_frame() -> pd.DataFrame:
+    # Share the slow source with startup enrichment. Keep the lock until the
+    # actual request finishes: a timed-out wrapper cannot cancel its worker.
+    with _OPEN_RANK_LOCK:
+        cached = _get_cache("open_rank_frame")
+        if cached is not None:
+            return cached
+        frame = ak.fund_open_fund_rank_em()
+        if not frame.empty:
+            _set_cache("open_rank_frame", frame, _LIST_TTL_SECONDS)
+        return frame
+
+
 def rankings(limit: int = 10) -> list[FundSummary]:
-    """基于 akshare 开放式基金/ETF 排行榜返回近一年收益排名。"""
-    cache_key = f"rankings:{limit}"
-    cached = _get_cache(cache_key)
-    if cached is not None:
-        return cached
+    """Serve a shared snapshot immediately while one worker refreshes it."""
+    global _RANKINGS_RETRY_AT
+    entry = _CACHE.get("rankings")  # Retain expired successful snapshots.
+    snapshot = entry[0] if entry else sorted(
+        _default_fund_list(), key=lambda f: f.one_year_return, reverse=True
+    )
+    if (entry is None or time.time() >= entry[1]) and time.monotonic() >= _RANKINGS_RETRY_AT:
+        if _RANKINGS_LOCK.acquire(blocking=False):
+            # Recheck after acquiring: another worker may have just finished.
+            entry = _CACHE.get("rankings")
+            if (entry is None or time.time() >= entry[1]) and time.monotonic() >= _RANKINGS_RETRY_AT:
+                try:
+                    Thread(target=_refresh_rankings, name="fund-rankings-refresh", daemon=True).start()
+                except Exception:
+                    _RANKINGS_LOCK.release()
+                    raise
+            else:
+                _RANKINGS_LOCK.release()
+    return snapshot[:limit]
 
+
+def _refresh_rankings() -> None:
+    global _RANKINGS_RETRY_AT
     try:
-        open_df = _call_akshare(ak.fund_open_fund_rank_em, timeout=10)
+        fresh = _fetch_rankings()
+        if fresh:
+            _set_cache("rankings", fresh, _LIST_TTL_SECONDS)
     except Exception:
-        open_df = pd.DataFrame()
+        logger.warning("Rankings refresh failed; retaining snapshot", exc_info=True)
+    finally:
+        _RANKINGS_RETRY_AT = time.monotonic() + 60
+        _RANKINGS_LOCK.release()
 
-    try:
-        etf_df = _call_akshare(ak.fund_exchange_rank_em, timeout=10)
-    except Exception:
-        etf_df = pd.DataFrame()
 
+def _fetch_rankings() -> list[FundSummary]:
+    # Run on the single daemon worker, without orphaned timeout threads.
+    frames = []
+    for fetch in (_open_rank_frame, ak.fund_exchange_rank_em):
+        try:
+            frames.append(fetch())
+        except Exception as exc:
+            logger.warning("Rankings source failed: %s", exc)
+    open_df, etf_df = (frames + [pd.DataFrame(), pd.DataFrame()])[:2]
     results: list[FundSummary] = []
     for df in (open_df, etf_df):
         if df.empty:
             continue
-        for _, row in df.head(limit).iterrows():
+        for _, row in df.iterrows():
             code = str(row.get("基金代码", "")).strip()
             name = str(row.get("基金简称", "")).strip()
             raw_type = str(row.get("类型", "")).strip() if "类型" in df.columns else ""
-            ftype = _simplify_type(raw_type) if raw_type else _type_from_name_list(code)
+            ftype = _simplify_type(raw_type) if raw_type else ("ETF" if _is_etf_code(code) else "混合型")
             try:
                 nav = float(row.get("单位净值", 0)) if "单位净值" in df.columns else 0.0
             except Exception:
@@ -895,9 +973,7 @@ def rankings(limit: int = 10) -> list[FundSummary]:
             seen.add(f.code)
             unique.append(f)
     unique.sort(key=lambda f: f.one_year_return, reverse=True)
-    result = unique[:limit]
-    _set_cache(cache_key, result, ttl=1800)
-    return result
+    return unique
 
 
 def popular(limit: int = 6) -> list[FundSummary]:
@@ -945,13 +1021,29 @@ def get_by_code(code: str) -> FundDetail:
         summary_one_year = summary.one_year_return
 
     # 2. 判断是否 ETF 并获取历史净值
-    is_etf = ftype == "ETF" or (summary is None and (upper.startswith(("51", "15", "56", "58", "16")) and len(upper) == 6))
-    if summary is None and is_etf:
-        ftype = "ETF"
+    #    统一以代码前缀为唯一真源（不依赖数据源类型字段，数据源可能误标）。
+    is_etf = _is_etf_code(upper)
+    if is_etf:
+        ftype = "ETF"  # 覆盖类型，确保前端能进入 K 线逻辑
 
-    nav_df = _fetch_etf_history(upper) if is_etf else _fetch_nav_history(upper)
+    # 3. 并行获取净值历史、真实持仓、行业分布、基本信息。
+    #    四者互不依赖，串行会放大 akshare 慢网络下的等待时间；并行后整体
+    #    耗时趋近最慢的一个请求（各请求内部已带超时与缓存，失败会回退默认值）。
+    with ThreadPoolExecutor(max_workers=4) as _ex:
+        _f_nav = (
+            _ex.submit(_fetch_etf_history, upper)
+            if is_etf
+            else _ex.submit(_fetch_nav_history, upper)
+        )
+        _f_sectors = _ex.submit(_fetch_real_sectors, upper)
+        _f_holdings = _ex.submit(_fetch_real_holdings, upper)
+        _f_basic = _ex.submit(_fetch_basic_info, upper)
+        nav_df = _f_nav.result()
+        sectors_raw = _f_sectors.result()
+        holdings_raw = _f_holdings.result()
+        basic_info = _f_basic.result()
 
-    # 3. 计算当前净值与涨跌幅（基于真实净值数据）
+    # 4. 计算当前净值与涨跌幅（基于真实净值数据）
     if not nav_df.empty:
         latest_nav = float(nav_df["单位净值"].iloc[-1])
         if len(nav_df) >= 2:
@@ -968,12 +1060,9 @@ def get_by_code(code: str) -> FundDetail:
     )
     metrics = _metrics_from_nav(nav_df, ftype)
 
-    # 4. 获取真实持仓与行业分布（季报数据），失败时回退到类型默认值
-    sectors = _fetch_real_sectors(upper) or _default_sectors(ftype)
-    top_holdings = _fetch_real_holdings(upper) or _default_top_holdings(ftype)
-
-    # 5. 尝试获取基金基本信息（规模、成立日期、基金经理）
-    basic_info = _fetch_basic_info(upper)
+    # 5. 真实持仓与行业分布（季报数据），失败时回退到类型默认值
+    sectors = sectors_raw or _default_sectors(ftype)
+    top_holdings = holdings_raw or _default_top_holdings(ftype)
     fund_size = basic_info.get("基金规模", basic_info.get("规模", basic_info.get("资产规模", "-")))
     if fund_size in ("", "nan", "<NA>", "None"):
         fund_size = "-"
@@ -1018,13 +1107,13 @@ def get_by_code(code: str) -> FundDetail:
 
 
 def nav_history(code: str) -> pd.DataFrame:
-    """返回该基金可用的历史净值/价格 DataFrame。"""
-    upper = code.strip().upper()
-    try:
-        detail = get_by_code(upper)
-    except ValueError:
-        detail = None
+    """返回该基金可用的历史净值/价格 DataFrame。
 
-    if detail and detail.type == "ETF":
+    通过代码前缀直接判断 ETF/非 ETF（与 market_service.kline 一致），
+    避免为确定类型而触发一次完整的 get_by_code()（含重仓/行业/基本信息
+    等多重 akshare 调用）。
+    """
+    upper = code.strip().upper()
+    if upper.startswith(("51", "15", "56", "58", "16")) and len(upper) == 6:
         return _fetch_etf_history(upper)
     return _fetch_nav_history(upper)

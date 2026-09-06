@@ -11,8 +11,8 @@ function makeQueryClient() {
         staleTime: 60 * 1000,
         // 窗口重新聚焦时不自动重新请求（避免不必要的刷新）
         refetchOnWindowFocus: false,
-        // 失败重试 1 次
-        retry: 1,
+        // 数据服务已有缓存/降级；自动重试只会让慢网络重复占用资源。
+        retry: 0,
       },
     },
   });

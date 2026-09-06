@@ -9,7 +9,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
-  Calendar,
   Percent,
   Search,
   Star,
@@ -36,20 +35,14 @@ import { MetricCard } from "@/components/metric-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { RiskScore } from "@/components/risk-score";
 import { KLineChart } from "@/components/kline-chart";
 import { DrawdownChart } from "@/components/drawdown-chart";
 import { RiskIndicatorTable } from "@/components/risk-indicator-table";
 import { TopHoldingsTable } from "@/components/top-holdings-table";
 import { PeerComparison } from "@/components/peer-comparison";
 import {
-  DrawdownPoint,
-  FundDetail,
   HoldStructure,
-  KlinePoint,
   NavPeriod,
-  PeerComparison as PeerComparisonType,
-  ReturnRanking,
   formatCurrency,
   formatPercent,
   formatRatio,
@@ -59,14 +52,23 @@ import {
   getHoldStructure,
   getPeerComparison,
   getReturnRanking,
-  searchFunds,
+  recordBrowsedFund,
 } from "@/services/fund";
+import { useFundSearch } from "@/hooks/use-fund-search";
 
 import { Users } from "lucide-react";
 
-// ── K 线周期选项 ──
+// ── K 线周期与时间范围（标准基金看板：周期 × 时间 双维度）──
 
 const PERIODS: { key: NavPeriod; label: string }[] = [
+  { key: "日K", label: "日K" },
+  { key: "周K", label: "周K" },
+  { key: "月K", label: "月K" },
+];
+
+type ChartRange = "1M" | "3M" | "6M" | "1Y" | "3Y";
+
+const RANGES: { key: ChartRange; label: string }[] = [
   { key: "1M", label: "1月" },
   { key: "3M", label: "3月" },
   { key: "6M", label: "6月" },
@@ -79,9 +81,15 @@ export default function FundDetailPage() {
   const rawId = params?.id;
   const code = typeof rawId === "string" ? rawId.toUpperCase() : "";
 
-  const [period, setPeriod] = useState<NavPeriod>("1Y");
+  const [period, setPeriod] = useState<NavPeriod>("日K");
+  const [chartRange, setChartRange] = useState<ChartRange>("1Y");
   const [query, setQuery] = useState("");
-  const [suggestions, setSuggestions] = useState<{ code: string; name: string }[]>([]);
+  const [secondaryCode, setSecondaryCode] = useState("");
+  const { suggestions: fundSuggestions } = useFundSearch(query, 6);
+  const suggestions = fundSuggestions.map(({ code: suggestionCode, name }) => ({
+    code: suggestionCode,
+    name,
+  }));
 
   // ── React Query: 基金详情（5 分钟缓存）──
   const {
@@ -93,16 +101,29 @@ export default function FundDetailPage() {
     queryFn: () => getFundDetail(code),
     enabled: !!code,
     staleTime: 5 * 60 * 1000,
-    retry: 1,
+    retry: 0,
   });
 
-  // ── React Query: K 线数据（按 code + period 缓存）──
+  // 查看基金详情后，记录到"最近浏览"（供首页面板展示）
+  useEffect(() => {
+    if (fund) recordBrowsedFund(fund);
+  }, [fund]);
+
+  // Let the core detail render first. Below-the-fold analysis starts shortly
+  // afterwards instead of competing with the first useful response.
+  useEffect(() => {
+    if (!fund || fund.code !== code) return;
+    const timer = window.setTimeout(() => setSecondaryCode(code), 400);
+    return () => window.clearTimeout(timer);
+  }, [code, fund]);
+
+  // ── React Query: K 线/净值走势数据（按 code + period 缓存，range 为纯视图状态）──
   const { data: klineData = [], isFetching: klineFetching } = useQuery({
     queryKey: ["kline", code, period],
     queryFn: () => getFundKlineHistory(code, period),
-    enabled: !!code,
+    enabled: !!fund && fund.code === code,
     staleTime: 5 * 60 * 1000,
-    retry: 1,
+    retry: 0,
     placeholderData: keepPreviousData,
   });
 
@@ -110,9 +131,9 @@ export default function FundDetailPage() {
   const { data: drawdownData = [] } = useQuery({
     queryKey: ["drawdown", code, period],
     queryFn: () => getFundDrawdownHistory(code, period),
-    enabled: !!code,
+    enabled: secondaryCode === code,
     staleTime: 5 * 60 * 1000,
-    retry: 1,
+    retry: 0,
     placeholderData: keepPreviousData,
   });
 
@@ -120,40 +141,28 @@ export default function FundDetailPage() {
   const { data: peers = [] } = useQuery({
     queryKey: ["peers", code],
     queryFn: () => getPeerComparison(code),
-    enabled: !!code,
+    enabled: secondaryCode === code,
     staleTime: 30 * 60 * 1000,
-    retry: 1,
+    retry: 0,
   });
 
   // ── React Query: 收益排名 ──
   const { data: ranking = null } = useQuery({
     queryKey: ["ranking", code],
     queryFn: () => getReturnRanking(code),
-    enabled: !!code,
+    enabled: secondaryCode === code,
     staleTime: 30 * 60 * 1000,
-    retry: 1,
+    retry: 0,
   });
 
   // ── React Query: 持有人结构 ──
   const { data: holdStructure = null } = useQuery<HoldStructure | null>({
     queryKey: ["holdStructure"],
     queryFn: getHoldStructure,
+    enabled: secondaryCode === code,
     staleTime: 2 * 60 * 60 * 1000, // 2 小时（季报数据）
-    retry: 1,
+    retry: 0,
   });
-
-  useEffect(() => {
-    if (!query.trim()) {
-      setSuggestions([]);
-      return;
-    }
-    const timer = setTimeout(() => {
-      searchFunds(query).then((results) => {
-        setSuggestions(results.slice(0, 6).map((f) => ({ code: f.code, name: f.name })));
-      });
-    }, 200);
-    return () => clearTimeout(timer);
-  }, [query]);
 
   if (!code) {
     return (
@@ -280,7 +289,6 @@ export default function FundDetailPage() {
                   href={`/fund/${s.code}`}
                   onClick={() => {
                     setQuery("");
-                    setSuggestions([]);
                   }}
                   className="flex items-center justify-between rounded-xl px-3 py-2.5 text-sm hover:bg-muted"
                 >
@@ -400,42 +408,76 @@ export default function FundDetailPage() {
         transition={{ duration: 0.6, delay: 0.32, ease: [0.23, 1, 0.32, 1] }}
         className="mb-5 rounded-2xl border border-border bg-background p-4 sm:p-5"
       >
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h3 className="text-base font-semibold tracking-tight">
               {fund.type === "ETF" ? "K线走势" : "净值走势"}
             </h3>
             <p className="text-xs text-muted-foreground">
-              {fund.type === "ETF" ? "红涨绿跌 · OHLC 蜡烛图" : "净值折线 · MA5/MA10/MA20"}
+              {fund.type === "ETF"
+                ? "红涨绿跌 · OHLC 蜡烛图 · 实时行情"
+                : "净值折线 · 日/周/月度净值点 · T-1净值，交易日盘后更新"}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {PERIODS.map((p) => (
-              <button
-                key={p.key}
-                onClick={() => setPeriod(p.key)}
-                disabled={klineFetching}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  period === p.key
-                    ? "bg-foreground text-background"
-                    : "text-muted-foreground hover:bg-muted"
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
+          <div className="flex flex-col gap-2">
+            {/* 周期 */}
+            <div className="flex flex-wrap gap-1 rounded-xl border border-border bg-muted/40 p-1">
+              {PERIODS.map((p) => (
+                <button
+                  key={p.key}
+                  onClick={() => setPeriod(p.key)}
+                  disabled={klineFetching}
+                  className={`rounded-lg px-3 py-1 text-xs font-medium transition-colors ${
+                    period === p.key
+                      ? "bg-background shadow-sm text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            {/* 时间范围 */}
+            <div className="flex flex-wrap gap-1 rounded-xl border border-border bg-muted/40 p-1">
+              {RANGES.map((r) => (
+                <button
+                  key={r.key}
+                  onClick={() => setChartRange(r.key)}
+                  disabled={klineFetching}
+                  className={`rounded-lg px-3 py-1 text-xs font-medium transition-colors ${
+                    chartRange === r.key
+                      ? "bg-background shadow-sm text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
         <div className="h-[320px] w-full">
           {klineData.length > 0 ? (
-            <KLineChart key={`${code}-${period}`} data={klineData} fundType={fund.type} />
+            <KLineChart
+              key={`${code}-${period}`}
+              data={klineData}
+              fundType={fund.type}
+              code={code}
+              period={period}
+              chartRange={chartRange}
+            />
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
               暂无数据
             </div>
           )}
         </div>
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          {fund.type === "ETF"
+            ? "ETF 为场内实时行情（含开/高/低/收与成交量），盘中实时更新。"
+            : "场外基金每个交易日仅一个单位净值，此处展示净值走势（非 K 线）；净值为 T-1，交易日盘后更新。"}
+        </p>
       </motion.div>
 
       {/* Drawdown + Risk indicators */}

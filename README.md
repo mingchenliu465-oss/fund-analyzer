@@ -100,3 +100,31 @@ NEXT_PUBLIC_USE_REAL_API=true npm run dev
 - 基金净值通常为 T-1 或收盘后更新，"实时"主要指行情/估值类数据。
 - akshare 依赖东方财富、天天基金等公开接口，可能因网络、反爬策略波动；后端在接口失败时会回退到默认数据，前端在 API 失败时会回退到 mock。
 - 首次加载基金全量列表可能需要 10-20 秒，后续请求从缓存读取会快很多。
+
+
+## Phase 2 验收
+
+从仓库根目录安装开发依赖并运行后端完整测试：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r backend/requirements-dev.txt
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+前端检查在 `frontend` 目录运行：
+
+```powershell
+npm.cmd run lint
+npx.cmd tsc --noEmit
+npm.cmd run build
+```
+
+pytest 自动使用临时 SQLite 数据库，不使用本地持仓库。运行服务时可用
+`FUND_ANALYZER_DB_PATH` 指定数据库文件，默认仍为 `backend/database/portfolio.db`。
+数据库、SQLite WAL/SHM、日志与测试缓存不纳入 Git。
+
+收益归因按当前持有份额和最近两次可用净值计算，按基金代码合并多笔持仓，
+组合收益等于展示的各基金贡献之和。行情缺失时保留估值并标记待更新，收益
+汇总只含可用行情。复盘配置比例使用持仓市值，不能用当日收益计算。
+此口径未覆盖日内买卖现金流、已卖出持仓和分红，因此不是完整账户收益核算。
+场外基金与 ETF 的数据日期可能不同，外部行情实时性需要单独在线验收。

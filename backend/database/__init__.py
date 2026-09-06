@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 DB_DIR = Path(__file__).resolve().parent
-DB_PATH = DB_DIR / "portfolio.db"
+DB_PATH = Path(os.environ.get("FUND_ANALYZER_DB_PATH", str(DB_DIR / "portfolio.db")))
 
 
 def get_connection() -> sqlite3.Connection:
@@ -35,6 +35,16 @@ def init_db() -> None:
             sell_amount REAL,
             sell_nav REAL,
             created_at TEXT DEFAULT (datetime('now','localtime'))
+        );
+
+        CREATE TABLE IF NOT EXISTS portfolio_snapshots (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            date        TEXT NOT NULL UNIQUE,
+            total_value REAL NOT NULL DEFAULT 0,
+            total_cost  REAL NOT NULL DEFAULT 0,
+            profit      REAL NOT NULL DEFAULT 0,
+            profit_rate REAL NOT NULL DEFAULT 0,
+            created_at  TEXT DEFAULT (datetime('now','localtime'))
         );
     """)
     conn.commit()

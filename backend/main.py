@@ -28,30 +28,29 @@ except Exception:
 
 from concurrent.futures import ThreadPoolExecutor
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+import logging
+import time
 
-from api import analysis, fund, market, portfolio
-from services import analysis_service, fund_service, market_service
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+logger = logging.getLogger(__name__)
+
+from api import analysis, fund, market, portfolio, review
+from services import fund_service
 
 # 用于后台预热缓存的线程池
 _warmup_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="warmup-")
 
 
 def _warmup_caches() -> None:
-    """在独立线程中预热基金列表与排名缓存，避免阻塞应用启动。"""
+    """空闲片刻后只预热基金列表，避免和首页请求争抢资源。"""
+    time.sleep(2)
     try:
         fund_service.list_all()
     except Exception as exc:
         print(f"Warmup fund list failed: {exc}")
-    try:
-        analysis_service._load_rank_df()
-    except Exception as exc:
-        print(f"Warmup rank list failed: {exc}")
-    try:
-        market_service.indices()
-    except Exception as exc:
-        print(f"Warmup indices failed: {exc}")
 
 
 @asynccontextmanager
@@ -82,6 +81,17 @@ app.include_router(fund.router, prefix="/api")
 app.include_router(market.router, prefix="/api")
 app.include_router(analysis.router, prefix="/api")
 app.include_router(portfolio.router, prefix="/api")
+app.include_router(review.router, prefix="/api")
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """兜底异常处理：避免未捕获异常返回裸 500，记录日志并返回结构化错误。"""
+    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "服务器内部错误，请稍后重试"},
+    )
 
 
 @app.get("/health", tags=["system"])

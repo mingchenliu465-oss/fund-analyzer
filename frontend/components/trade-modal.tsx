@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Modal } from "./ui/modal";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -27,38 +27,22 @@ export function TradeModal({
 
   // ── Sell form state ──
   const [sellDate, setSellDate] = useState(today);
-  const [sellNav, setSellNav] = useState("");
+  const [sellNav, setSellNav] = useState(
+    holding.current_nav != null ? String(holding.current_nav) : ""
+  );
   const [sellAmount, setSellAmount] = useState("");
 
   // ── Edit form state ──
-  const [buyDate, setBuyDate] = useState("");
-  const [buyAmount, setBuyAmount] = useState("");
-  const [buyNav, setBuyNav] = useState("");
-  const [shares, setShares] = useState("");
-  const [fee, setFee] = useState("");
-  const [notes, setNotes] = useState("");
-
-  // Reset form when holding or mode changes
-  useEffect(() => {
-    if (!open) return;
-    if (mode === "sell") {
-      setSellDate(today);
-      setSellNav(holding.current_nav != null ? String(holding.current_nav) : "");
-      setSellAmount("");
-    } else {
-      setBuyDate(holding.buy_date);
-      setBuyAmount(String(holding.buy_amount));
-      setBuyNav(String(holding.buy_nav));
-      setShares(String(holding.shares));
-      setFee(String(holding.fee ?? 0));
-      setNotes(holding.notes ?? "");
-    }
-  }, [open, mode, holding, today]);
+  const [buyDate, setBuyDate] = useState(holding.buy_date);
+  const [buyAmount, setBuyAmount] = useState(String(holding.buy_amount));
+  const [buyNav, setBuyNav] = useState(String(holding.buy_nav));
+  const [shares, setShares] = useState(String(holding.shares));
+  const [fee, setFee] = useState(String(holding.fee ?? 0));
+  const [notes, setNotes] = useState(holding.notes ?? "");
 
   // Auto-calc sell amount when sell NAV changes
   const sellNavNum = parseFloat(sellNav) || 0;
   const sharesNum = holding.shares ?? 0;
-  const autoSellAmount = sellNavNum * sharesNum;
 
   // Preview P&L
   const cost = holding.cost ?? 0;
