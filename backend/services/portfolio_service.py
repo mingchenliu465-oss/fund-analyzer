@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import logging
 import math
+import statistics
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -867,3 +869,292 @@ def auto_drip(data: DripCreate) -> dict:
         conn.close()
 
     return {"created": len(created), "items": created, "skipped": skipped}
+
+
+# ---------------------------------------------------------------------------
+# Portfolio Insights（组合洞察）
+# ---------------------------------------------------------------------------
+
+_INSIGHT_INDEXES = (
+    ("sh000300", "沪深300"),
+    ("sh000905", "中证500"),
+    ("sz399006", "创业板指"),
+    ("H11001", "中证全债"),
+)
+
+
+def _insight_period_days(period: str) -> int | None:
+    return {"1W": 7, "1M": 30, "3M": 90, "1Y": 365}.get(period.upper())
+
+
+def _build_history_insight(points: list[dict]) -> dict:
+    """将现有日快照转换成趋势和异常波动提示。
+
+    快照无法识别期间申购/赎回，因此字段名称明确使用 day_change，避免把
+    资产变化误称为精确的账户收益。
+    """
+    rows: list[dict] = []
+    changes: list[float] = []
+    for index, point in enumerate(points):
+        value = float(point.get("total_value", 0) or 0)
+        change = None
+        change_pct = None
+        if index > 0:
+            previous = float(points[index - 1].get("total_value", 0) or 0)
+            change = round(value - previous, 2)
+            if previous > 0:
+                change_pct = round(change / previous * 100, 2)
+                changes.append(change_pct)
+        rows.append({
+            "date": str(point.get("date", "")),
+            "total_value": round(value, 2),
+            "profit": round(float(point.get("profit", 0) or 0), 2),
+            "day_change": change,
+            "day_change_pct": change_pct,
+            "is_anomaly": False,
+        })
+
+    anomaly_date = None
+    anomaly_reason = None
+    # 用当前点之前的变化估计范围，避免异常值把自己的阈值抬高。
+    if len(changes) >= 5:
+        for row_index, row in enumerate(rows[1:], start=0):
+            value = row.get("day_change_pct")
+            prior = changes[:row_index]
+            if value is None or len(prior) < 4:
+                continue
+            mean = statistics.mean(prior)
+            stdev = statistics.pstdev(prior)
+            threshold = max(2.0, abs(mean) + 2 * stdev)
+            if abs(value) >= threshold:
+                row["is_anomaly"] = True
+                anomaly_date = row["date"]
+                anomaly_reason = f"该日资产快照变化 {value:+.2f}%，明显偏离近期波动范围。"
+                break
+
+    if len(rows) < 2:
+        trend = "暂无"
+    elif rows[-1]["total_value"] > rows[0]["total_value"]:
+        trend = "上升"
+    elif rows[-1]["total_value"] < rows[0]["total_value"]:
+        trend = "下降"
+    else:
+        trend = "基本持平"
+
+    return {
+        "points": rows,
+        "trend": trend,
+        "anomaly_detected": anomaly_date is not None,
+        "anomaly_date": anomaly_date,
+        "anomaly_reason": anomaly_reason,
+        "data_sufficiency": "ready" if len(rows) >= 2 else "insufficient",
+        "note": "历史数据基于组合资产快照，未扣除期间现金流。",
+    }
+
+
+def _fetch_index_return(code: str, cutoff: str | None) -> float | None:
+    """读取指数日线并计算区间涨跌幅；失败时返回 None。"""
+    try:
+        from models.market import NavPeriod
+        from services import market_service
+
+        points = market_service.index_kline(code, NavPeriod.DAILY)
+        if not points:
+            return None
+        visible = [p for p in points if not cutoff or p.date >= cutoff]
+        if len(visible) < 2:
+            return None
+        first = float(visible[0].close)
+        last = float(visible[-1].close)
+        return round((last / first - 1) * 100, 2) if first else None
+    except Exception as exc:
+        logger.warning("portfolio insight index return failed for %s: %s", code, exc)
+        return None
+
+
+def _build_overlap_pairs(value_by_code: dict[str, float]) -> tuple[str, list[dict]]:
+    """基于真实季报十大持仓计算基金之间的底层重叠。
+
+    _fetch_real_holdings 返回 None 时表示数据源不可用；绝不调用
+    get_by_code() 的默认持仓，避免把示例数据当成真实风险结论。
+    """
+    if len(value_by_code) < 2:
+        return "unavailable", []
+
+    from services import fund_service
+
+    codes = [code for code, _ in sorted(value_by_code.items(), key=lambda item: item[1], reverse=True)[:8]]
+    with ThreadPoolExecutor(max_workers=min(4, len(codes))) as executor:
+        futures = {code: executor.submit(fund_service._fetch_real_holdings, code) for code in codes}
+        holdings_map = {code: future.result() for code, future in futures.items()}
+
+    available_codes = [code for code, rows in holdings_map.items() if rows]
+    if len(available_codes) < 2:
+        return "unavailable", []
+
+    pairs: list[dict] = []
+    for index, code_a in enumerate(available_codes):
+        rows_a = {str(row.code): (str(row.name), float(row.weight)) for row in holdings_map[code_a] if row.code}
+        for code_b in available_codes[index + 1:]:
+            rows_b = {str(row.code): (str(row.name), float(row.weight)) for row in holdings_map[code_b] if row.code}
+            shared = sorted(set(rows_a) & set(rows_b))
+            if not shared:
+                continue
+            overlap = sum(min(rows_a[code][1], rows_b[code][1]) for code in shared)
+            if overlap >= 10:
+                pairs.append({
+                    "fund_a": code_a,
+                    "fund_b": code_b,
+                    "shared_holdings": [rows_a[code][0] for code in shared],
+                    "overlap_pct": round(overlap, 2),
+                    "data_as_of": "2024",
+                })
+    pairs.sort(key=lambda item: item["overlap_pct"], reverse=True)
+    return "available", pairs[:5]
+
+
+def insights(period: str = "1M") -> dict:
+    """生成组合洞察：收益解释、集中度、市场对比与历史变化。"""
+    period = period.upper()
+    if period not in {"1W", "1M", "3M", "1Y", "ALL"}:
+        period = "1M"
+
+    summary = portfolio_summary()
+    attribution_result = attribution()
+    contributions = attribution_result.get("contributions", [])
+    active_values = {c["fund_code"]: float(c.get("current_value", 0) or 0) for c in contributions}
+    total_value = sum(active_values.values())
+
+    top_gainers = [c for c in contributions if c.get("contribution", 0) > 0][:3]
+    top_draggers = [c for c in reversed(contributions) if c.get("contribution", 0) < 0][:3]
+    stale_count = sum(1 for c in contributions if c.get("nav_stale"))
+    today_return = float(attribution_result.get("today_return", 0) or 0)
+    today_return_pct = float(attribution_result.get("today_return_pct", 0) or 0)
+    if not contributions:
+        sentence = "暂无持仓，录入真实交易后即可生成组合洞察。"
+        data_status = "empty"
+    elif today_return > 0:
+        sentence = f"今天组合上涨 ¥{today_return:,.2f}，主要由 {top_gainers[0]['fund_name']} 贡献。" if top_gainers else "今天组合小幅上涨。"
+        data_status = "partial" if stale_count else "ready"
+    elif today_return < 0:
+        sentence = f"今天组合下跌 ¥{abs(today_return):,.2f}，主要拖累来自 {top_draggers[0]['fund_name']}。" if top_draggers else "今天组合小幅下跌。"
+        data_status = "partial" if stale_count else "ready"
+    else:
+        sentence = "今天组合基本持平，暂无明显的收益来源。"
+        data_status = "partial" if stale_count else "ready"
+
+    allocation_map: dict[str, dict[str, float]] = {}
+    for c in contributions:
+        category = c.get("fund_type") or "其他"
+        bucket = allocation_map.setdefault(category, {"value": 0.0, "holding_count": 0})
+        bucket["value"] += float(c.get("current_value", 0) or 0)
+        bucket["holding_count"] += 1
+    allocation = [
+        {
+            "category": category,
+            "value": round(bucket["value"], 2),
+            "weight_pct": round(bucket["value"] / total_value * 100, 2) if total_value else 0.0,
+            "holding_count": int(bucket["holding_count"]),
+        }
+        for category, bucket in allocation_map.items()
+    ]
+    allocation.sort(key=lambda item: item["weight_pct"], reverse=True)
+
+    sorted_values = sorted(active_values.items(), key=lambda item: item[1], reverse=True)
+    max_code, max_value = sorted_values[0] if sorted_values else (None, 0.0)
+    max_name = next((c.get("fund_name") for c in contributions if c.get("fund_code") == max_code), None)
+    weights = [value / total_value for value in active_values.values()] if total_value else []
+    hhi = round(sum(weight * weight for weight in weights) * 10000, 2) if weights else 0.0
+    max_weight = max_value / total_value * 100 if total_value else 0.0
+    if not weights:
+        concentration_level = "暂无"
+    elif hhi >= 2500 or max_weight >= 50:
+        concentration_level = "高"
+    elif hhi >= 1500 or max_weight >= 30:
+        concentration_level = "中"
+    else:
+        concentration_level = "低"
+    overlap_status, overlap_pairs = _build_overlap_pairs(active_values)
+    risk_notes = []
+    if max_weight >= 40:
+        risk_notes.append(f"最大持仓占比 {max_weight:.1f}%，组合对单只基金依赖较高。")
+    if overlap_status != "available":
+        risk_notes.append("暂未取得至少两只基金的真实季报十大持仓，无法可靠判断底层重叠。")
+    if stale_count:
+        risk_notes.append("部分基金净值待更新，收益归因可能不完整。")
+
+    history_points = portfolio_history(period)
+    history = _build_history_insight(history_points)
+    cutoff = None
+    days = _insight_period_days(period)
+    if days is not None:
+        cutoff = (datetime.now() - timedelta(days=days)).date().isoformat()
+    first_snapshot = next((p for p in history_points if not cutoff or p["date"] >= cutoff), None)
+    last_snapshot = history_points[-1] if history_points else None
+    portfolio_period_return = None
+    if first_snapshot and last_snapshot and float(first_snapshot.get("total_value", 0) or 0) > 0 and first_snapshot is not last_snapshot:
+        portfolio_period_return = round((float(last_snapshot["total_value"]) / float(first_snapshot["total_value"]) - 1) * 100, 2)
+
+    market_results: list[dict] = []
+    with ThreadPoolExecutor(max_workers=len(_INSIGHT_INDEXES)) as executor:
+        futures = {code: executor.submit(_fetch_index_return, code, cutoff) for code, _ in _INSIGHT_INDEXES}
+        for code, name in _INSIGHT_INDEXES:
+            index_return = futures[code].result()
+            available = portfolio_period_return is not None and index_return is not None
+            market_results.append({
+                "code": code,
+                "name": name,
+                "portfolio_return_pct": portfolio_period_return,
+                "index_return_pct": index_return,
+                "relative_return_pct": round(portfolio_period_return - index_return, 2) if available else None,
+                "available": available,
+                "reason": None if available else "组合或指数在所选区间缺少足够历史数据。",
+            })
+
+    review_context = [
+        {"key": "today_return", "label": "今日组合收益", "value": f"{today_return:+.2f}", "source": "portfolio.attribution"},
+        {"key": "today_return_pct", "label": "今日组合收益率", "value": f"{today_return_pct:+.2f}%", "source": "portfolio.attribution"},
+        {"key": "concentration_level", "label": "集中度等级", "value": concentration_level, "source": "portfolio.holdings"},
+        {"key": "history_trend", "label": "快照趋势", "value": history["trend"], "source": "portfolio.snapshots"},
+    ]
+
+    if data_status != "empty" and (
+        stale_count
+        or history["data_sufficiency"] != "ready"
+        or not any(item["available"] for item in market_results)
+    ):
+        data_status = "partial"
+
+    return {
+        "period": period,
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "data_status": data_status,
+        "headline": {
+            "today_return": round(today_return, 2),
+            "today_return_pct": round(today_return_pct, 2),
+            "sentence": sentence,
+            "data_status": data_status,
+        },
+        "return_explanation": {
+            "contributions": contributions,
+            "top_gainers": top_gainers,
+            "top_draggers": top_draggers,
+            "positive_total": round(sum(c.get("contribution", 0) for c in contributions if c.get("contribution", 0) > 0), 2),
+            "negative_total": round(sum(c.get("contribution", 0) for c in contributions if c.get("contribution", 0) < 0), 2),
+            "stale_count": stale_count,
+        },
+        "risk": {
+            "allocation": allocation,
+            "max_holding": {"fund_code": max_code, "fund_name": max_name, "value": round(max_value, 2), "weight_pct": round(max_weight, 2)},
+            "concentration_ratio": round(max_weight, 2),
+            "hhi": hhi,
+            "concentration_level": concentration_level,
+            "overlap_status": overlap_status,
+            "overlap_pairs": overlap_pairs,
+            "notes": risk_notes,
+        },
+        "market_comparison": market_results,
+        "history": history,
+        "review_context": review_context,
+        "notes": ["收益归因使用最近两次可用净值；场外基金通常为 T-1 净值。", "历史趋势基于资产快照，未扣除期间现金流。"],
+    }

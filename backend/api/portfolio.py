@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException
 
 from models.portfolio import DripCreate, HoldingCreate, HoldingItem, PortfolioSummary, SellRequest
+from models.portfolio_insights import PortfolioInsights
 from services import portfolio_service
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
@@ -24,6 +25,12 @@ def get_portfolio_history(period: str = "1M"):
 def get_portfolio_attribution():
     """收益归因：今日组合收益 + 每只基金贡献（含 summary 供 AI 复盘）。"""
     return portfolio_service.attribution()
+
+
+@router.get("/insights", response_model=PortfolioInsights)
+def get_portfolio_insights(period: str = "1M"):
+    """组合洞察：收益解释、集中度、指数对比与历史变化。"""
+    return portfolio_service.insights(period)
 
 
 @router.get("/holdings", response_model=list[HoldingItem])

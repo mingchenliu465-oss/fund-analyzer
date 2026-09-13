@@ -88,6 +88,7 @@ NEXT_PUBLIC_USE_REAL_API=true npm run dev
 | GET | `/api/analysis/peers/{code}` | 同类基金对比 |
 | GET | `/api/analysis/ranking/{code}` | 收益排名 |
 | GET | `/api/analysis/portfolio` | 组合概览 |
+| GET | `/api/portfolio/insights?period=1W\|1M\|3M\|1Y\|ALL` | 组合洞察（收益解释、集中度、指数对比、历史变化） |
 | GET | `/api/analysis/flow/{code}` | 资金流向（模拟） |
 | GET | `/api/analysis/ai/{code}` | AI 解读（模拟） |
 

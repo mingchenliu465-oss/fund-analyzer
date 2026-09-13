@@ -84,7 +84,9 @@ export default function FundDetailPage() {
   const [period, setPeriod] = useState<NavPeriod>("日K");
   const [chartRange, setChartRange] = useState<ChartRange>("1Y");
   const [query, setQuery] = useState("");
-  const [secondaryCode, setSecondaryCode] = useState("");
+  // Deep analysis uses several slower endpoints. Keep it opt-in so the core
+  // fund page becomes useful as soon as the detail request is ready.
+  const [analysisEnabled, setAnalysisEnabled] = useState(false);
   const { suggestions: fundSuggestions } = useFundSearch(query, 6);
   const suggestions = fundSuggestions.map(({ code: suggestionCode, name }) => ({
     code: suggestionCode,
@@ -109,14 +111,6 @@ export default function FundDetailPage() {
     if (fund) recordBrowsedFund(fund);
   }, [fund]);
 
-  // Let the core detail render first. Below-the-fold analysis starts shortly
-  // afterwards instead of competing with the first useful response.
-  useEffect(() => {
-    if (!fund || fund.code !== code) return;
-    const timer = window.setTimeout(() => setSecondaryCode(code), 400);
-    return () => window.clearTimeout(timer);
-  }, [code, fund]);
-
   // ── React Query: K 线/净值走势数据（按 code + period 缓存，range 为纯视图状态）──
   const { data: klineData = [], isFetching: klineFetching } = useQuery({
     queryKey: ["kline", code, period],
@@ -131,7 +125,7 @@ export default function FundDetailPage() {
   const { data: drawdownData = [] } = useQuery({
     queryKey: ["drawdown", code, period],
     queryFn: () => getFundDrawdownHistory(code, period),
-    enabled: secondaryCode === code,
+    enabled: analysisEnabled && !!code,
     staleTime: 5 * 60 * 1000,
     retry: 0,
     placeholderData: keepPreviousData,
@@ -141,7 +135,7 @@ export default function FundDetailPage() {
   const { data: peers = [] } = useQuery({
     queryKey: ["peers", code],
     queryFn: () => getPeerComparison(code),
-    enabled: secondaryCode === code,
+    enabled: analysisEnabled && !!code,
     staleTime: 30 * 60 * 1000,
     retry: 0,
   });
@@ -150,7 +144,7 @@ export default function FundDetailPage() {
   const { data: ranking = null } = useQuery({
     queryKey: ["ranking", code],
     queryFn: () => getReturnRanking(code),
-    enabled: secondaryCode === code,
+    enabled: analysisEnabled && !!code,
     staleTime: 30 * 60 * 1000,
     retry: 0,
   });
@@ -159,7 +153,7 @@ export default function FundDetailPage() {
   const { data: holdStructure = null } = useQuery<HoldStructure | null>({
     queryKey: ["holdStructure"],
     queryFn: getHoldStructure,
-    enabled: secondaryCode === code,
+    enabled: analysisEnabled && !!code,
     staleTime: 2 * 60 * 60 * 1000, // 2 小时（季报数据）
     retry: 0,
   });
@@ -202,9 +196,21 @@ export default function FundDetailPage() {
   }
 
   const isUp = fund.changePct >= 0;
+  const diagnosis = fund.metrics.maxDrawdown <= -0.2
+    ? "历史波动较大，适合能承受明显回撤的长期投资者。"
+    : fund.metrics.maxDrawdown <= -0.1
+      ? "收益和波动较为均衡，建议结合持有期限观察。"
+      : "历史回撤相对温和，但仍需关注收益是否匹配预期。";
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+      <section className="mb-6 rounded-2xl border border-accent/20 bg-accent/5 p-5 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div><div className="flex items-center gap-2 text-sm font-semibold"><Zap className="h-4 w-4 text-accent" />基金诊断</div><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{diagnosis}</p></div>
+          <div className="grid grid-cols-2 gap-3 text-sm sm:min-w-[250px]"><div className="rounded-xl border border-border bg-background/70 p-3"><span className="block text-xs text-muted-foreground">近一年收益</span><strong className={fund.oneYearReturn >= 0 ? "mt-1 block text-positive" : "mt-1 block text-negative"}>{formatPercent(fund.oneYearReturn)}</strong></div><div className="rounded-xl border border-border bg-background/70 p-3"><span className="block text-xs text-muted-foreground">最大回撤</span><strong className="mt-1 block text-negative">{formatPercent(fund.metrics.maxDrawdown)}</strong></div></div>
+        </div>
+        <p className="mt-4 border-t border-accent/10 pt-3 text-xs text-muted-foreground">根据历史数据生成，仅帮助理解，不构成买卖建议。</p>
+      </section>
       {/* Header */}
       <section className="mb-6">
         <motion.div
@@ -482,26 +488,41 @@ export default function FundDetailPage() {
 
       {/* Drawdown + Risk indicators */}
       <div className="mb-5 grid gap-4 lg:grid-cols-2">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.35, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-2xl border border-border bg-background p-4 sm:p-5"
-        >
-          <div className="mb-3">
-            <h3 className="text-base font-semibold tracking-tight">历史最大回撤</h3>
-            <p className="text-xs text-muted-foreground">基于选定周期计算的滚动回撤</p>
+        {analysisEnabled ? (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.35, ease: [0.23, 1, 0.32, 1] }}
+            className="rounded-2xl border border-border bg-background p-4 sm:p-5"
+          >
+            <div className="mb-3">
+              <h3 className="text-base font-semibold tracking-tight">历史最大回撤</h3>
+              <p className="text-xs text-muted-foreground">基于选定周期计算的滚动回撤</p>
+            </div>
+            <div className="h-[260px]">
+              {drawdownData.length > 0 ? (
+                <DrawdownChart data={drawdownData} />
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  暂无数据
+                </div>
+              )}
+            </div>
+          </motion.div>
+        ) : (
+          <div className="flex min-h-[340px] flex-col justify-center rounded-2xl border border-dashed border-border bg-muted/20 p-6">
+            <div className="text-sm font-semibold">深度分析</div>
+            <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+              回撤曲线、同类对比和持有人结构需要额外读取数据。核心行情已经加载，点击后再加载这些分析。
+            </p>
+            <Button
+              onClick={() => setAnalysisEnabled(true)}
+              className="mt-5 w-fit rounded-xl bg-foreground text-background hover:bg-foreground/90"
+            >
+              加载深度分析 <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
           </div>
-          <div className="h-[260px]">
-            {drawdownData.length > 0 ? (
-              <DrawdownChart data={drawdownData} />
-            ) : (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                暂无数据
-              </div>
-            )}
-          </div>
-        </motion.div>
+        )}
 
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -601,18 +622,20 @@ export default function FundDetailPage() {
       </div>
 
       {/* Peer comparison */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.47, ease: [0.23, 1, 0.32, 1] }}
-        className="mb-5 rounded-2xl border border-border bg-background p-4 sm:p-5"
-      >
-        <div className="mb-3">
-          <h3 className="text-base font-semibold tracking-tight">同类基金对比</h3>
-          <p className="text-xs text-muted-foreground">与相同类型基金的近一年收益、风险指标对比</p>
-        </div>
-        <PeerComparison data={peers} targetCode={fund.code} />
-      </motion.div>
+      {analysisEnabled && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.47, ease: [0.23, 1, 0.32, 1] }}
+          className="mb-5 rounded-2xl border border-border bg-background p-4 sm:p-5"
+        >
+          <div className="mb-3">
+            <h3 className="text-base font-semibold tracking-tight">同类基金对比</h3>
+            <p className="text-xs text-muted-foreground">与相同类型基金的近一年收益、风险指标对比</p>
+          </div>
+          <PeerComparison data={peers} targetCode={fund.code} />
+        </motion.div>
+      )}
 
       {/* Hold Structure (全市场机构/个人持仓趋势) */}
       {holdStructure && holdStructure.points.length > 0 && (

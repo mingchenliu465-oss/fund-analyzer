@@ -755,11 +755,29 @@ def _fetch_real_sectors(code: str) -> list[Sector] | None:
                 merged[s.name] = (prev_weight + s.weight, prev_color)
             else:
                 merged[s.name] = (s.weight, s.color)
-        sectors = [Sector(name=name, weight=weight, color=color)
-                   for name, (weight, color) in merged.items()]
-        # Sort desc and limit
+        # 统一成百分比。部分数据源会返回小数（0.3996），也可能因为
+        # 行业层级重复返回而导致合计大于 100%；两种情况都要在这里修正，
+        # 不能把原始异常值直接展示给用户。
+        total_weight = sum(weight for weight, _ in merged.values())
+        if total_weight <= 0:
+            _set_cache(cache_key, [], _HOLDINGS_CACHE_TTL)
+            return None
+        multiplier = 100.0 if total_weight <= 1.05 else 1.0
+        scale = (100.0 / total_weight) if total_weight > 100.5 else 1.0
+        sectors = [
+            Sector(name=name, weight=round(weight * multiplier * scale, 2), color=color)
+            for name, (weight, color) in merged.items()
+        ]
         sectors.sort(key=lambda s: s.weight, reverse=True)
-        sectors = sectors[:10]
+        top = sectors[:10]
+        remainder = round(100.0 - sum(s.weight for s in top), 2)
+        if remainder > 0.05:
+            other = next((sector for sector in top if sector.name == "其他"), None)
+            if other is not None:
+                other.weight = round(other.weight + remainder, 2)
+            else:
+                top.append(Sector(name="其他", weight=remainder, color=colors[9]))
+        sectors = top
         _set_cache(cache_key, sectors, _HOLDINGS_CACHE_TTL)
         return sectors if sectors else None
     except Exception as exc:

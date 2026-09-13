@@ -232,6 +232,67 @@ export interface AttributionResult {
   top_loser: AttributionContribution | null;
 }
 
+export interface PortfolioInsightContribution {
+  fund_code: string;
+  fund_name: string;
+  fund_type: string;
+  current_value: number;
+  change_pct: number;
+  contribution: number;
+  contribution_rate: number;
+  nav_stale: boolean;
+}
+
+export interface PortfolioInsights {
+  period: string;
+  generated_at: string;
+  data_status: "ready" | "partial" | "empty" | string;
+  headline: {
+    today_return: number;
+    today_return_pct: number;
+    sentence: string;
+    data_status: string;
+  };
+  return_explanation: {
+    contributions: PortfolioInsightContribution[];
+    top_gainers: PortfolioInsightContribution[];
+    top_draggers: PortfolioInsightContribution[];
+    positive_total: number;
+    negative_total: number;
+    stale_count: number;
+  };
+  risk: {
+    allocation: { category: string; value: number; weight_pct: number; holding_count: number }[];
+    max_holding: { fund_code: string | null; fund_name: string | null; value: number; weight_pct: number };
+    concentration_ratio: number;
+    hhi: number;
+    concentration_level: string;
+    overlap_status: string;
+    overlap_pairs: { fund_a: string; fund_b: string; shared_holdings: string[]; overlap_pct: number; data_as_of: string | null }[];
+    notes: string[];
+  };
+  market_comparison: {
+    code: string;
+    name: string;
+    portfolio_return_pct: number | null;
+    index_return_pct: number | null;
+    relative_return_pct: number | null;
+    available: boolean;
+    reason: string | null;
+  }[];
+  history: {
+    points: { date: string; total_value: number; profit: number; day_change: number | null; day_change_pct: number | null; is_anomaly: boolean }[];
+    trend: string;
+    anomaly_detected: boolean;
+    anomaly_date: string | null;
+    anomaly_reason: string | null;
+    data_sufficiency: string;
+    note: string;
+  };
+  review_context: { key: string; label: string; value: string; source: string }[];
+  notes: string[];
+}
+
 export interface HoldStructurePoint {
   date: string;
   fundCount: number;
@@ -827,11 +888,12 @@ export async function getAllFunds(query?: string): Promise<FundSummary[]> {
 export async function getFundDetail(code: string): Promise<FundDetail | null> {
   if (USE_REAL_API) {
     try {
-      return await fetchJson<FundDetail>(
+      const detail = await fetchJson<FundDetail>(
         `/api/funds/${encodeURIComponent(code.trim().toUpperCase())}`,
         undefined,
         DETAIL_TIMEOUT_MS
       );
+      return detail ? { ...detail, sectors: normalizeSectors(detail.sectors) } : detail;
     } catch (err) {
       console.warn("getFundDetail API failed, fallback to mock", err);
     }
@@ -841,6 +903,26 @@ export async function getFundDetail(code: string): Promise<FundDetail | null> {
   const summary = FUND_POOL.find((f) => f.code === upper);
   if (!summary) return null;
   return syntheticDetail(summary);
+}
+
+/** Keep API inconsistencies from rendering impossible allocation percentages. */
+export function normalizeSectors(sectors: Sector[] | undefined): Sector[] {
+  if (!Array.isArray(sectors)) return [];
+  const valid = sectors.filter((sector) => Number.isFinite(sector.weight) && sector.weight > 0);
+  const total = valid.reduce((sum, sector) => sum + sector.weight, 0);
+  if (!total) return [];
+  const multiplier = total <= 1.05 ? 100 : 1;
+  const scale = total > 100.5 ? 100 / total : 1;
+  const normalized = valid.map((sector) => ({ ...sector, weight: Math.round(sector.weight * multiplier * scale * 100) / 100 }));
+  normalized.sort((a, b) => b.weight - a.weight);
+  const top = normalized.slice(0, 10);
+  const remainder = Math.round((100 - top.reduce((sum, sector) => sum + sector.weight, 0)) * 100) / 100;
+  if (remainder > 0.05) {
+    const other = top.find((sector) => sector.name === "其他");
+    if (other) other.weight = Math.round((other.weight + remainder) * 100) / 100;
+    else top.push({ name: "其他", weight: remainder, color: "#d1d1d6" });
+  }
+  return top;
 }
 
 export async function getFundNavHistory(
@@ -1165,6 +1247,21 @@ export async function getPortfolioAttribution(): Promise<AttributionResult | nul
     return await fetchJson<AttributionResult>("/api/portfolio/attribution");
   } catch (err) {
     console.warn("getPortfolioAttribution failed:", err);
+    return null;
+  }
+}
+
+export async function getPortfolioInsights(
+  period: PortfolioHistoryPeriod = "1M"
+): Promise<PortfolioInsights | null> {
+  try {
+    return await fetchJson<PortfolioInsights>(
+      `/api/portfolio/insights?period=${period}`,
+      undefined,
+      MARKET_TIMEOUT_MS
+    );
+  } catch (err) {
+    console.warn("getPortfolioInsights failed:", err);
     return null;
   }
 }

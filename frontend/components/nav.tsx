@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { BarChart3, PieChart, FileText, Home, Scale, Menu, X } from "lucide-react";
+import { BarChart3, PieChart, FileText, Home, Scale, Menu, X, Sparkles } from "lucide-react";
 import { useState } from "react";
 
 const navItems = [
   { href: "/", label: "首页", icon: Home },
   { href: "/fund", label: "基金分析", icon: BarChart3 },
   { href: "/portfolio", label: "我的组合", icon: PieChart },
+  { href: "/insights", label: "组合洞察", icon: Sparkles },
   { href: "/compare", label: "基金对比", icon: Scale },
   { href: "/review", label: "投资复盘", icon: FileText },
 ];

@@ -14,6 +14,7 @@ import {
   PieChart,
   Scale,
   Search,
+  Sparkles,
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
@@ -57,6 +58,13 @@ const quickLinks = [
     desc: "生成并跟踪资产配置",
     icon: PieChart,
     color: "bg-foreground",
+  },
+  {
+    href: "/insights",
+    title: "组合洞察",
+    desc: "解释组合今天为什么变化",
+    icon: Sparkles,
+    color: "bg-accent",
   },
   {
     href: "/review",
