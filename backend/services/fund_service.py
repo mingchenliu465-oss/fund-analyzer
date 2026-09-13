@@ -1010,9 +1010,16 @@ def search(query: str) -> list[FundSummary]:
 def get_by_code(code: str) -> FundDetail:
     upper = code.strip().upper()
 
-    # 1. 从基金列表获取基金名称和类型
-    funds = _load_fund_list()
-    summary = next((f for f in funds if f.code == upper), None)
+    # 1. 从基金列表获取基金名称和类型。
+    # 常用基金直接使用内置快照，避免详情页首次打开时等待全市场
+    # fund_name_em（这个接口在网络较慢时可能需要几十秒）。未知代码
+    # 仍然走完整列表，保证搜索到的基金不会丢失。
+    summary = None
+    if upper in _DEFAULT_FUND_CODES:
+        summary = next((f for f in _default_fund_list() if f.code == upper), None)
+    else:
+        funds = _load_fund_list()
+        summary = next((f for f in funds if f.code == upper), None)
 
     if summary is None:
         # 基金不在缓存列表中（可能是 akshare 不可用导致默认列表不完整）。
