@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from models.fund import FundDetail, FundSummary
-from models.market import NavPeriod, NavPoint
+from models.market import NavPeriod, NavPoint, period_to_days
 from services import fund_service, portfolio_service
 
 router = APIRouter(prefix="/funds", tags=["funds"])
@@ -99,13 +99,10 @@ def get_fund_nav_history(
 
     from datetime import datetime, timedelta
 
-    cutoff = datetime.now() - timedelta(days={
-        NavPeriod.ONE_MONTH: 30,
-        NavPeriod.THREE_MONTH: 90,
-        NavPeriod.SIX_MONTH: 180,
-        NavPeriod.ONE_YEAR: 365,
-        NavPeriod.THREE_YEAR: 1095,
-    }[period])
+    # 复用 models.market.period_to_days 的唯一实现（覆盖全部 NavPeriod 取值）。
+    # 原实现在此处内联了一份只有 5 个键的字典且无默认值，传入 5D/10D/20D/
+    # 日K/周K/月K/年K 等合法周期会抛 KeyError 变成 500。
+    cutoff = datetime.now() - timedelta(days=period_to_days(period))
     df = df[df["净值日期"] >= cutoff].copy()
     df = df.sort_values("净值日期").reset_index(drop=True)
 

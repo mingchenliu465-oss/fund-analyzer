@@ -20,6 +20,36 @@ class NavPeriod(str, Enum):
     THREE_YEAR = "3Y"
 
 
+# 展示周期 → 天数。**必须是 NavPeriod 的完整映射**：新增枚举值时请同步这里，
+# tests/test_period_mapping.py 会强制校验完整性，避免再出现"字典缺项 → 500"。
+PERIOD_DAYS: dict[NavPeriod, int] = {
+    NavPeriod.FIVE_DAY: 7,
+    NavPeriod.TEN_DAY: 14,
+    NavPeriod.TWENTY_DAY: 30,
+    NavPeriod.DAILY: 60,
+    NavPeriod.WEEKLY: 180,
+    NavPeriod.MONTHLY: 730,
+    NavPeriod.YEARLY: 1825,
+    NavPeriod.ONE_MONTH: 30,
+    NavPeriod.THREE_MONTH: 90,
+    NavPeriod.SIX_MONTH: 180,
+    NavPeriod.ONE_YEAR: 365,
+    NavPeriod.THREE_YEAR: 1095,
+}
+
+
+def period_to_days(period: NavPeriod) -> int:
+    """把展示周期换算为天数（唯一实现，供各路由/服务复用）。
+
+    取不到时抛 ValueError（而不是裸 KeyError）：即使将来新增了枚举值，
+    也会得到一条明确错误，并且完整性测试会先失败。
+    """
+    try:
+        return PERIOD_DAYS[period]
+    except KeyError:
+        raise ValueError(f"不支持的周期: {period}") from None
+
+
 class KlinePoint(BaseModel):
     """K 线点，与前端 KlinePoint 对齐。volume/turnover 仅 ETF 有值。"""
 

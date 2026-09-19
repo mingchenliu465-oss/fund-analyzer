@@ -47,6 +47,25 @@ def _format_date(dt: datetime, period: NavPeriod) -> str:
     return dt.strftime("%Y-%m-%d")
 
 
+# 展示周期 → pandas 重采样规则（"日"频的周期统一按日聚合）。
+# **必须是 NavPeriod 的完整映射**：新增枚举值时同步这里，
+# tests/test_period_mapping.py 会强制校验完整性，避免"字典缺项 → 500"。
+PERIOD_RESAMPLE_RULE: dict[NavPeriod, str] = {
+    NavPeriod.FIVE_DAY: "D",
+    NavPeriod.TEN_DAY: "D",
+    NavPeriod.TWENTY_DAY: "D",
+    NavPeriod.DAILY: "D",
+    NavPeriod.WEEKLY: "W",
+    NavPeriod.MONTHLY: "ME",
+    NavPeriod.YEARLY: "YE",
+    NavPeriod.ONE_MONTH: "D",
+    NavPeriod.THREE_MONTH: "W",
+    NavPeriod.SIX_MONTH: "W",
+    NavPeriod.ONE_YEAR: "ME",
+    NavPeriod.THREE_YEAR: "QE",
+}
+
+
 def _resample_to_kline(nav_df: pd.DataFrame, period: NavPeriod) -> list[KlinePoint]:
     """将净值/OHLCV 数据转为 K线点。
 
@@ -61,21 +80,7 @@ def _resample_to_kline(nav_df: pd.DataFrame, period: NavPeriod) -> list[KlinePoi
     df["净值日期"] = pd.to_datetime(df["净值日期"])
     df = df.set_index("净值日期").sort_index()
 
-    freq_map = {
-        NavPeriod.FIVE_DAY: "D",
-        NavPeriod.TEN_DAY: "D",
-        NavPeriod.TWENTY_DAY: "D",
-        NavPeriod.DAILY: "D",
-        NavPeriod.WEEKLY: "W",
-        NavPeriod.MONTHLY: "ME",
-        NavPeriod.YEARLY: "YE",
-        NavPeriod.ONE_MONTH: "D",
-        NavPeriod.THREE_MONTH: "W",
-        NavPeriod.SIX_MONTH: "W",
-        NavPeriod.ONE_YEAR: "ME",
-        NavPeriod.THREE_YEAR: "QE",
-    }
-    freq = freq_map[period]
+    freq = PERIOD_RESAMPLE_RULE[period]
 
     has_ohlc = {"open", "high", "low", "close"}.issubset(df.columns)
 

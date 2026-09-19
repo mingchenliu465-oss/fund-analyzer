@@ -22,27 +22,10 @@ from models.analysis import (
     PortfolioOverview,
     ReturnRanking,
 )
-from models.market import DrawdownPoint, NavPeriod
+from models.market import DrawdownPoint, NavPeriod, period_to_days
 from services import fund_service
 
 logger = logging.getLogger(__name__)
-
-
-def _period_to_days(period: NavPeriod) -> int:
-    return {
-        NavPeriod.FIVE_DAY: 7,
-        NavPeriod.TEN_DAY: 14,
-        NavPeriod.TWENTY_DAY: 30,
-        NavPeriod.DAILY: 60,
-        NavPeriod.WEEKLY: 180,
-        NavPeriod.MONTHLY: 730,
-        NavPeriod.YEARLY: 1825,
-        NavPeriod.ONE_MONTH: 30,
-        NavPeriod.THREE_MONTH: 90,
-        NavPeriod.SIX_MONTH: 180,
-        NavPeriod.ONE_YEAR: 365,
-        NavPeriod.THREE_YEAR: 1095,
-    }[period]
 
 
 def drawdown(code: str, period: NavPeriod = NavPeriod.ONE_YEAR) -> list[DrawdownPoint]:
@@ -52,7 +35,7 @@ def drawdown(code: str, period: NavPeriod = NavPeriod.ONE_YEAR) -> list[Drawdown
     if df.empty:
         return []
 
-    cutoff = datetime.now() - timedelta(days=_period_to_days(period))
+    cutoff = datetime.now() - timedelta(days=period_to_days(period))
     df = df[df["净值日期"] >= cutoff].copy()
     if df.empty:
         return []
