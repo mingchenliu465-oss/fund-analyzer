@@ -83,7 +83,7 @@ const quickLinks = [
 ];
 
 const emptyPortfolio: PortfolioOverviewData = {
-  totalAssets: 0, todayReturn: 0, todayReturnPct: 0,
+  totalAssets: 0, todayReturn: null, todayReturnPct: null,
   cumulativeReturn: 0, cumulativeReturnPct: 0,
   allocation: [], riskLevel: "暂无", riskScore: 0,
 };
@@ -103,7 +103,7 @@ export default function HomePage() {
 
   // ── React Query: 数据请求自动缓存、去重、后台更新 ──
 
-  const { data: rankings = [] } = useQuery({
+  const { data: rankings = [], isError: rankingsFailed } = useQuery({
     queryKey: ["rankings", 8],
     queryFn: () => getFundRankings(8),
     staleTime: STALE_TIME.rankings,
@@ -115,7 +115,7 @@ export default function HomePage() {
     staleTime: STALE_TIME.recentlyWatched,
   });
 
-  const { data: marketIndices = [] } = useQuery({
+  const { data: marketIndices = [], isError: indicesFailed } = useQuery({
     queryKey: ["marketIndices"],
     queryFn: getMarketIndices,
     staleTime: STALE_TIME.marketIndices,
@@ -127,7 +127,7 @@ export default function HomePage() {
     staleTime: STALE_TIME.marketStatus,
   });
 
-  const { data: portfolio = emptyPortfolio } = useQuery<PortfolioOverviewData>({
+  const { data: portfolio = emptyPortfolio, isError: portfolioFailed } = useQuery<PortfolioOverviewData>({
     queryKey: ["portfolioOverview"],
     queryFn: getPortfolioOverview,
     staleTime: STALE_TIME.portfolioOverview,
@@ -252,7 +252,11 @@ export default function HomePage() {
             <div>
               <h2 className="text-base font-semibold tracking-tight">我的组合总览</h2>
               <p className="text-xs text-muted-foreground">
-                {portfolio.totalAssets > 0 ? "真实持仓数据" : "暂无持仓记录"}
+                {portfolioFailed
+                  ? "数据暂时不可用"
+                  : portfolio.totalAssets > 0
+                    ? "真实持仓数据"
+                    : "暂无持仓记录"}
               </p>
             </div>
             <Link href="/portfolio">
@@ -262,7 +266,13 @@ export default function HomePage() {
               </Button>
             </Link>
           </div>
-          {portfolio.totalAssets > 0 ? (
+          {portfolioFailed ? (
+            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+              <PieChart className="mb-3 h-10 w-10 opacity-30" />
+              <p className="text-sm font-medium">数据暂时不可用，请重新加载。</p>
+              <p className="mt-1 text-xs">未使用任何替代数据</p>
+            </div>
+          ) : portfolio.totalAssets > 0 ? (
               <PortfolioOverview data={portfolio} />
             ) : (
               <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
@@ -311,8 +321,8 @@ export default function HomePage() {
               ))
             ) : (
               <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                <p className="text-sm">暂无指数数据</p>
-                <p className="mt-1 text-xs">数据源暂时不可用</p>
+                <p className="text-sm">{indicesFailed ? "数据暂时不可用，请重新加载。" : "暂无真实指数数据。"}</p>
+                <p className="mt-1 text-xs">未使用任何替代数据</p>
               </div>
             )}
           </div>
@@ -330,7 +340,9 @@ export default function HomePage() {
           <div className="mb-3 flex items-center justify-between">
             <div>
               <h2 className="text-base font-semibold tracking-tight">热门基金排行榜</h2>
-              <p className="text-xs text-muted-foreground">按近一年收益排序</p>
+              <p className="text-xs text-muted-foreground">
+                {rankingsFailed ? "数据暂时不可用，请重新加载。" : "按近一年收益排序"}
+              </p>
             </div>
             <Link
               href="/fund"

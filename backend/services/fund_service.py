@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 import logging
-import math
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime, timedelta
@@ -88,35 +87,6 @@ def _call_akshare(func: Callable[..., _AkExecute], *args: Any, timeout: int = _A
 # Fund list
 # -----------------------------------------------------------------------------
 
-_DEFAULT_FUND_CODES = [
-    "000001",
-    "000300",
-    "000905",
-    "110020",
-    "110022",
-    "000171",
-    "003474",
-    "110003",
-    "160706",
-    "002190",
-    "161725",
-    "005827",
-    "004698",
-    "000248",
-    "000339",
-    "002621",
-    "001594",
-    "003096",
-    "512880",
-    "510300",
-    "518880",
-    "510050",
-    "159915",
-    "000295",
-    "519300",
-]
-
-
 _FUND_LIST_SNAPSHOT: list[FundSummary] | None = None
 
 # 基金列表加载锁：warmup 与并发请求同时触发时会重复调用慢接口（fund_name_em
@@ -157,7 +127,11 @@ def _build_enrichment_lookup() -> dict[str, dict[str, float]]:
 
 
 def _load_fund_list() -> list[FundSummary]:
-    """从 akshare 拉取全部基金列表，用排行榜数据丰富后缓存。失败时返回默认快照。"""
+    """从 akshare 拉取全部基金列表，用排行榜数据丰富后缓存。
+
+    失败时返回空列表：绝不返回硬编码的替代基金池（那会让用户看到
+    真实代码 + 伪造净值的基金）。
+    """
     cached = _get_cache("fund_list")
     if cached is not None:
         return cached
@@ -208,55 +182,8 @@ def _load_fund_list() -> list[FundSummary]:
             logger.info("Fund list loaded: %d total, %d enriched with real data", len(funds), enriched_count)
             return funds
         except Exception as exc:
-            logger.warning("akshare fund_name_em failed: %s, using default snapshot", exc)
-            default = _default_fund_list()
-            _set_cache("fund_list", default, ttl=600)  # 失败时缓存回退列表 10 分钟，避免重复超时
-            return default
-
-
-def _default_fund_list() -> list[FundSummary]:
-    """当 akshare 不可用时使用的默认基金池（来自前端 mock）。"""
-    return [
-        FundSummary(
-            code=code,
-            name=name,
-            company=company,
-            type=ftype,
-            nav=nav,
-            change_pct=change_pct,
-            one_year_return=one_year_return,
-            risk_level=risk_level,
-            size=size,
-            heat=heat,
-        )
-        for code, name, company, ftype, nav, change_pct, one_year_return, risk_level, size, heat in [
-            ("000300", "沪深300指数基金", "华夏基金", "股票型", 1.2842, 1.24, 0.1284, "中高", "120.5亿", 92),
-            ("000905", "中证500指数基金", "南方基金", "股票型", 2.105, 0.86, 0.0805, "中高", "85.3亿", 78),
-            ("110022", "易方达消费行业", "易方达基金", "股票型", 3.4521, 0.72, 0.0872, "高", "210.8亿", 88),
-            ("000171", "易方达裕丰回报", "易方达基金", "债券型", 1.125, 0.05, 0.0415, "中低", "45.2亿", 45),
-            ("003474", "南方天天利货币", "南方基金", "货币型", 1.0002, 0.01, 0.0192, "低", "320.1亿", 60),
-            ("110003", "易方达上证50增强", "易方达基金", "股票型", 2.8765, 1.05, 0.095, "中高", "132.6亿", 70),
-            ("160706", "嘉实沪深300ETF联接", "嘉实基金", "ETF联接", 1.3102, 1.18, 0.121, "中高", "95.4亿", 65),
-            ("110020", "易方达沪深300ETF联接A", "易方达基金", "ETF联接", 1.2842, 1.24, 0.1284, "中高", "120.5亿", 92),
-            ("000001", "华夏成长混合", "华夏基金", "混合型", 1.056, -0.34, 0.062, "中", "58.7亿", 55),
-            ("002190", "农银新能源主题", "农银汇理基金", "股票型", 2.341, -0.82, -0.028, "高", "76.3亿", 72),
-            ("161725", "招商中证白酒指数", "招商基金", "股票型", 1.562, 1.45, 0.105, "高", "185.2亿", 95),
-            ("005827", "易方达蓝筹精选", "易方达基金", "混合型", 2.105, 0.55, 0.071, "中", "298.5亿", 82),
-            ("004698", "博时军工主题", "博时基金", "股票型", 1.423, -0.21, 0.048, "高", "42.1亿", 58),
-            ("000248", "汇添富中证主要消费ETF联接", "汇添富基金", "ETF联接", 1.782, 0.93, 0.092, "中高", "67.8亿", 63),
-            ("000339", "长城久益保本", "长城基金", "债券型", 1.045, 0.03, 0.033, "中低", "12.4亿", 22),
-            ("002621", "中欧消费主题", "中欧基金", "股票型", 1.89, 0.67, 0.089, "高", "55.6亿", 50),
-            ("001594", "天弘中证银行指数", "天弘基金", "股票型", 1.234, 0.42, 0.055, "中高", "88.9亿", 48),
-            ("003096", "中欧医疗健康混合", "中欧基金", "混合型", 2.56, -0.15, -0.012, "中", "112.3亿", 75),
-            ("512880", "国泰中证全指证券公司ETF", "国泰基金", "ETF", 0.982, 2.1, 0.153, "高", "78.6亿", 80),
-            ("510300", "华泰柏瑞沪深300ETF", "华泰柏瑞基金", "ETF", 4.125, 1.28, 0.131, "高", "256.4亿", 85),
-            ("518880", "华安黄金ETF", "华安基金", "ETF", 4.56, -0.45, 0.084, "高", "68.2亿", 52),
-            ("510050", "华夏上证50ETF", "华夏基金", "ETF", 3.125, 1.15, 0.095, "高", "512.3亿", 82),
-            ("159915", "易方达创业板ETF", "易方达基金", "ETF", 2.45, 0.85, 0.062, "高", "185.6亿", 78),
-            ("000295", "华安科技动力混合", "华安基金", "混合型", 2.34, 0.55, 0.076, "中", "35.2亿", 62),
-            ("519300", "大成沪深300增强", "大成基金", "股票型", 1.856, 0.92, 0.115, "中高", "45.8亿", 68),
-        ]
-    ]
+            logger.warning("akshare fund_name_em failed: %s (returning empty list)", exc)
+            return []
 
 
 def _simplify_type(raw: str) -> str:
@@ -328,46 +255,11 @@ def _heat_score(name: str, ftype: str) -> int:
 # -----------------------------------------------------------------------------
 
 
-def _fallback_nav_history(code: str, periods: int = 365) -> pd.DataFrame:
-    """为内置常用基金生成一条轻量的净值走势兜底数据。
-
-    外部行情源不可用时，页面仍应能展示趋势图，而不是等待接口超时后空白。
-    这组数据只用于演示和交互兜底，真实数据恢复后会优先使用真实数据。
-    """
-    summary = next((f for f in _default_fund_list() if f.code == code), None)
-    if summary is None or summary.nav <= 0:
-        return pd.DataFrame(columns=["净值日期", "单位净值", "日增长率"])
-
-    periods = max(30, min(periods, 730))
-    dates = pd.bdate_range(end=datetime.now(), periods=periods)
-    total_return = float(summary.one_year_return)
-    start_nav = summary.nav / (1 + total_return) if (1 + total_return) > 0 else summary.nav
-    values = [
-        start_nav
-        * ((1 + total_return) ** (i / max(1, periods - 1)))
-        * (1 + 0.018 * math.sin(i / 7.0) + 0.009 * math.sin(i / 19.0))
-        for i in range(periods)
-    ]
-    # Keep the latest point aligned with the snapshot NAV after adding the small
-    # deterministic fluctuation used to make risk metrics meaningful.
-    if values:
-        values[-1] = summary.nav
-    rows: list[dict[str, Any]] = []
-    previous = values[0]
-    for date, value in zip(dates, values):
-        rows.append(
-            {
-                "净值日期": date,
-                "单位净值": round(value, 4),
-                "日增长率": round((value - previous) / previous * 100, 4) if previous else 0.0,
-            }
-        )
-        previous = value
-    return pd.DataFrame(rows)
-
-
 def _fetch_nav_history(code: str) -> pd.DataFrame:
-    """获取场外基金历史净值 DataFrame，列：净值日期、单位净值、日增长率。"""
+    """获取场外基金历史净值 DataFrame，列：净值日期、单位净值、日增长率。
+
+    取不到时返回空的同结构 DataFrame —— 不生成任何替代净值序列。
+    """
     cache_key = f"nav:{code}"
     cached = _get_cache(cache_key)
     if cached is not None:
@@ -382,10 +274,6 @@ def _fetch_nav_history(code: str) -> pd.DataFrame:
         return df
     except Exception as exc:
         logger.warning("nav history fetch failed for %s: %s", code, exc)
-        fallback = _fallback_nav_history(code)
-        if not fallback.empty:
-            _set_cache(cache_key, fallback, ttl=300)
-            return fallback
         return pd.DataFrame(columns=["净值日期", "单位净值", "日增长率"])
 
 
@@ -829,59 +717,6 @@ def _fetch_real_sectors(code: str) -> list[Sector] | None:
         return None
 
 
-def _default_sectors(ftype: str) -> list[Sector]:
-    colors = ["#171717", "#0071e3", "#6e6e73", "#00a550", "#ff9500", "#ff3b30", "#af52de", "#34c759", "#5856d6", "#d1d1d6"]
-    if ftype == "货币型":
-        return [
-            Sector(name="银行存款", weight=55, color=colors[0]),
-            Sector(name="同业存单", weight=30, color=colors[1]),
-            Sector(name="回购资产", weight=10, color=colors[2]),
-            Sector(name="债券", weight=5, color=colors[9]),
-        ]
-    if ftype == "债券型":
-        return [
-            Sector(name="利率债", weight=45, color=colors[0]),
-            Sector(name="信用债", weight=35, color=colors[1]),
-            Sector(name="可转债", weight=12, color=colors[2]),
-            Sector(name="银行存款", weight=8, color=colors[9]),
-        ]
-    return [
-        Sector(name="金融", weight=20, color=colors[0]),
-        Sector(name="消费", weight=18, color=colors[1]),
-        Sector(name="信息技术", weight=16, color=colors[2]),
-        Sector(name="工业", weight=14, color=colors[3]),
-        Sector(name="医疗保健", weight=12, color=colors[4]),
-        Sector(name="原材料", weight=8, color=colors[5]),
-        Sector(name="通信服务", weight=7, color=colors[6]),
-        Sector(name="其他", weight=5, color=colors[9]),
-    ]
-
-
-def _default_top_holdings(ftype: str) -> list[TopHolding]:
-    if ftype == "货币型":
-        return [
-            TopHolding(name="银行存款", weight=55, change_pct=0.0),
-            TopHolding(name="同业存单", weight=30, change_pct=0.0),
-            TopHolding(name="回购资产", weight=10, change_pct=0.0),
-            TopHolding(name="短期债券", weight=5, change_pct=0.0),
-        ]
-    if ftype == "债券型":
-        return [
-            TopHolding(name="21国债10", code="019658", weight=8.5, change_pct=0.02),
-            TopHolding(name="22国开10", code="220210", weight=6.2, change_pct=0.01),
-            TopHolding(name="浦发转债", code="110059", weight=3.1, change_pct=0.05),
-            TopHolding(name="兴业转债", code="113052", weight=2.8, change_pct=0.03),
-            TopHolding(name="20工行二级", code="2028045", weight=2.5, change_pct=0.01),
-        ]
-    return [
-        TopHolding(name="贵州茅台", code="600519", weight=5.2, change_pct=1.1),
-        TopHolding(name="宁德时代", code="300750", weight=3.1, change_pct=0.8),
-        TopHolding(name="中国平安", code="601318", weight=2.8, change_pct=0.5),
-        TopHolding(name="招商银行", code="600036", weight=2.5, change_pct=0.3),
-        TopHolding(name="五粮液", code="000858", weight=2.1, change_pct=1.2),
-    ]
-
-
 def _style_for_type(ftype: str) -> str:
     if ftype == "货币型":
         return "现金管理"
@@ -949,9 +784,8 @@ def rankings(limit: int = 10) -> list[FundSummary]:
     """Serve a shared snapshot immediately while one worker refreshes it."""
     global _RANKINGS_RETRY_AT
     entry = _CACHE.get("rankings")  # Retain expired successful snapshots.
-    snapshot = entry[0] if entry else sorted(
-        _default_fund_list(), key=lambda f: f.one_year_return, reverse=True
-    )
+    # 没有任何真实快照时返回空列表，而不是硬编码的替代榜单。
+    snapshot = entry[0] if entry else []
     if (entry is None or time.time() >= entry[1]) and time.monotonic() >= _RANKINGS_RETRY_AT:
         if _RANKINGS_LOCK.acquire(blocking=False):
             # Recheck after acquiring: another worker may have just finished.
@@ -1054,39 +888,17 @@ def get_by_code(code: str) -> FundDetail:
     upper = code.strip().upper()
 
     # 1. 从基金列表获取基金名称和类型。
-    # 常用基金直接使用内置快照，避免详情页首次打开时等待全市场
-    # fund_name_em（这个接口在网络较慢时可能需要几十秒）。未知代码
-    # 仍然走完整列表，保证搜索到的基金不会丢失。
-    summary = None
-    if upper in _DEFAULT_FUND_CODES:
-        summary = next((f for f in _default_fund_list() if f.code == upper), None)
-    else:
-        funds = _load_fund_list()
-        summary = next((f for f in funds if f.code == upper), None)
+    #    基金列表是"该基金是否存在"的唯一真源；不在列表中即视为未知基金。
+    funds = _load_fund_list()
+    summary = next((f for f in funds if f.code == upper), None)
 
     if summary is None:
-        # 基金不在缓存列表中（可能是 akshare 不可用导致默认列表不完整）。
-        # 尝试直接从 akshare 获取 NAV 数据来构建基本信息。
-        name = f"基金{upper}"
-        ftype = "混合型"  # 保守默认
-        company = "-"
-        enrichment = {}
-        summary_nav = 1.0
-        summary_one_year = 0.0
-        # 尝试从 enrichment cache 中查找
-        try:
-            enrich = _build_enrichment_lookup()
-            if upper in enrich:
-                enrichment = enrich[upper]
-        except Exception:
-            pass
-    else:
-        name = summary.name
-        ftype = summary.type
-        company = _extract_company(name)
-        enrichment = {}
-        summary_nav = summary.nav if summary.nav > 0 else 1.0
-        summary_one_year = summary.one_year_return
+        # 绝不编造名称/类型/公司/净值来凑出一个详情页。
+        raise ValueError(f"未找到基金 {upper}")
+
+    name = summary.name
+    ftype = summary.type
+    company = _extract_company(name)
 
     # 2. 判断是否 ETF 并获取历史净值
     #    统一以代码前缀为唯一真源（不依赖数据源类型字段，数据源可能误标）。
@@ -1094,49 +906,42 @@ def get_by_code(code: str) -> FundDetail:
     if is_etf:
         ftype = "ETF"  # 覆盖类型，确保前端能进入 K 线逻辑
 
-    # 3. 获取净值历史、真实持仓、行业分布、基本信息。
-    # 内置常用基金优先使用本地兜底数据：akshare 的部分 JS 接口在 Windows
-    # 多线程并发时会卡住甚至触发 mini_racer 崩溃，详情页不应为此等待。
-    if upper in _DEFAULT_FUND_CODES:
-        nav_df = _fallback_nav_history(upper) if not is_etf else _fetch_etf_history(upper)
-        sectors_raw = []
-        holdings_raw = []
-        basic_info = {}
-    else:
-        with ThreadPoolExecutor(max_workers=4) as _ex:
-            _f_nav = (
-                _ex.submit(_fetch_etf_history, upper)
-                if is_etf
-                else _ex.submit(_fetch_nav_history, upper)
-            )
-            _f_sectors = _ex.submit(_fetch_real_sectors, upper)
-            _f_holdings = _ex.submit(_fetch_real_holdings, upper)
-            _f_basic = _ex.submit(_fetch_basic_info, upper)
-            nav_df = _f_nav.result()
-            sectors_raw = _f_sectors.result()
-            holdings_raw = _f_holdings.result()
-            basic_info = _f_basic.result()
+    # 3. 获取净值历史、真实持仓、行业分布、基本信息（四者并行）。
+    with ThreadPoolExecutor(max_workers=4) as _ex:
+        _f_nav = (
+            _ex.submit(_fetch_etf_history, upper)
+            if is_etf
+            else _ex.submit(_fetch_nav_history, upper)
+        )
+        _f_sectors = _ex.submit(_fetch_real_sectors, upper)
+        _f_holdings = _ex.submit(_fetch_real_holdings, upper)
+        _f_basic = _ex.submit(_fetch_basic_info, upper)
+        nav_df = _f_nav.result()
+        sectors_raw = _f_sectors.result()
+        holdings_raw = _f_holdings.result()
+        basic_info = _f_basic.result()
 
-    # 4. 计算当前净值与涨跌幅（基于真实净值数据）
-    if not nav_df.empty:
-        latest_nav = float(nav_df["单位净值"].iloc[-1])
-        if len(nav_df) >= 2:
-            prev_nav = float(nav_df["单位净值"].iloc[-2])
-            change_pct = (latest_nav - prev_nav) / prev_nav * 100
-        else:
-            change_pct = 0.0
-    else:
-        latest_nav = enrichment.get("nav", summary_nav)
-        change_pct = enrichment.get("change_pct", 0.0)
+    # 4. 计算当前净值与涨跌幅。
+    #    没有真实净值序列时不能给出任何收益率 / 波动率 / 回撤 / 夏普比率：
+    #    那些指标全部由净值序列推导，缺失净值就没有指标可言。直接报错，
+    #    由前端展示"数据暂时不可用"，绝不填充 0、估算值或生成序列。
+    if nav_df.empty:
+        raise ValueError(f"暂无基金 {upper} 的真实净值数据")
 
-    returns = _returns_from_nav(nav_df) if not nav_df.empty else FundReturns(
-        daily=0.0, weekly=0.0, monthly=0.0, yearly=enrichment.get("one_year_return", summary_one_year)
-    )
+    latest_nav = float(nav_df["单位净值"].iloc[-1])
+    if len(nav_df) >= 2:
+        prev_nav = float(nav_df["单位净值"].iloc[-2])
+        change_pct = (latest_nav - prev_nav) / prev_nav * 100
+    else:
+        # 只有一条净值时无法计算日涨跌，保持 0（无前值可比较）。
+        change_pct = 0.0
+
+    returns = _returns_from_nav(nav_df)
     metrics = _metrics_from_nav(nav_df, ftype)
 
-    # 5. 真实持仓与行业分布（季报数据），失败时回退到类型默认值
-    sectors = sectors_raw or _default_sectors(ftype)
-    top_holdings = holdings_raw or _default_top_holdings(ftype)
+    # 5. 真实持仓与行业分布（季报数据）。取不到就留空 —— 不填充任何默认持仓/行业。
+    sectors = sectors_raw or []
+    top_holdings = holdings_raw or []
     fund_size = basic_info.get("基金规模", basic_info.get("规模", basic_info.get("资产规模", "-")))
     if fund_size in ("", "nan", "<NA>", "None"):
         fund_size = "-"
@@ -1148,11 +953,9 @@ def get_by_code(code: str) -> FundDetail:
     manager = basic_info.get("基金经理", basic_info.get("基金经理人", basic_info.get("现任基金经理", "暂无数据")))
     if manager in ("", "nan", "<NA>", "None"):
         manager = "暂无数据"
-    # 数据源通常不给出经理任职起始日；用基金成立日作为稳定兜底，确保前端可展示从业天数。
-    try:
-        manager_days = max(0, (datetime.now() - datetime.fromisoformat(inception)).days)
-    except (TypeError, ValueError):
-        manager_days = None
+    # 数据源不提供基金经理任职起始日：不估算，返回 None（前端显示"暂无"），
+    # 绝不用基金成立日冒充经理任职天数。
+    manager_days = None
     # 基金评级（如果数据源提供）
     rating_str = basic_info.get("评级", basic_info.get("基金评级", ""))
     try:
@@ -1177,7 +980,7 @@ def get_by_code(code: str) -> FundDetail:
         metrics=metrics,
         sectors=sectors,
         tags=_tags_for(name, ftype),
-        description=f"{name}是一只{ftype}基金。" if summary is None else f"{name}是一只{ftype}基金。",
+        description=f"{name}是一只{ftype}基金。",
         manager=manager,
         manager_days=manager_days,
         rating=rating,
@@ -1194,14 +997,6 @@ def nav_history(code: str) -> pd.DataFrame:
     等多重 akshare 调用）。
     """
     upper = code.strip().upper()
-    if upper in _DEFAULT_FUND_CODES and not _is_etf_code(upper):
-        cache_key = f"nav:fallback:{upper}"
-        cached = _get_cache(cache_key)
-        if cached is not None:
-            return cached
-        fallback = _fallback_nav_history(upper)
-        _set_cache(cache_key, fallback, ttl=300)
-        return fallback
-    if upper.startswith(("51", "15", "56", "58", "16")) and len(upper) == 6:
+    if _is_etf_code(upper):
         return _fetch_etf_history(upper)
     return _fetch_nav_history(upper)

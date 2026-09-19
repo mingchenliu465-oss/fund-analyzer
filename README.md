@@ -9,7 +9,7 @@ fund-analyzer/
 ├── frontend/          # Next.js 前端
 │   ├── app/           # 页面路由
 │   ├── components/    # 可复用组件
-│   └── services/fund.ts   # 数据服务层（mock / 真实 API 切换）
+│   └── services/fund.ts   # 数据服务层（只调用真实后端 API，无 mock）
 ├── backend/           # FastAPI 后端
 │   ├── api/           # REST 路由
 │   ├── models/        # Pydantic 模型
@@ -38,21 +38,14 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 ### 3. 启动前端
 
-**Mock 模式（默认，不依赖后端）：**
-
 ```bash
 cd frontend
 npm run dev
 ```
 
-**真实数据模式（需先启动后端）：**
-
-```bash
-cd frontend
-NEXT_PUBLIC_USE_REAL_API=true npm run dev
-```
-
 前端默认地址 `http://localhost:3000`。`next.config.ts` 已将 `/api/*` rewrite 到 `http://localhost:8000/api/*`。
+
+前端**没有 mock / 演示模式**：所有数据都必须来自后端真实接口。取不到数据时页面显示"数据暂时不可用"或"暂无数据"，不会展示任何模拟或补齐的数值。
 
 ## 数据源
 
@@ -69,7 +62,6 @@ NEXT_PUBLIC_USE_REAL_API=true npm run dev
 
 | 变量 | 说明 | 默认值 |
 |---|---|---|
-| `NEXT_PUBLIC_USE_REAL_API` | 前端是否调用后端真实 API | `false` |
 | `NEXT_PUBLIC_API_URL` | 前端 API 基础地址 | `""`（使用 Next.js rewrite） |
 
 ## 主要 API
@@ -99,7 +91,7 @@ NEXT_PUBLIC_USE_REAL_API=true npm run dev
 ## 注意事项
 
 - 基金净值通常为 T-1 或收盘后更新，"实时"主要指行情/估值类数据。
-- akshare 依赖东方财富、天天基金等公开接口，可能因网络、反爬策略波动；后端在接口失败时会回退到默认数据，前端在 API 失败时会回退到 mock。
+- akshare 依赖东方财富、天天基金等公开接口，可能因网络、反爬策略波动。**数据源失败时后端返回空结果或明确错误，前端显示"数据暂时不可用"，绝不使用任何替代、估算或模拟数据。**
 - 首次加载基金全量列表可能需要 10-20 秒，后续请求从缓存读取会快很多。
 
 

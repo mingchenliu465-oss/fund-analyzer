@@ -69,7 +69,10 @@ export default function ComparePage() {
       return;
     }
     const t = setTimeout(() => {
-      searchFunds(query).then((r) => setSuggestions(r.slice(0, 6)));
+      // 搜索失败时不显示任何建议（不编造候选基金）。
+      searchFunds(query)
+        .then((r) => setSuggestions(r.slice(0, 6)))
+        .catch(() => setSuggestions([]));
     }, 250);
     return () => clearTimeout(t);
   }, [query]);

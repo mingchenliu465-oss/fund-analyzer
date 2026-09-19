@@ -10,7 +10,9 @@ interface PortfolioOverviewProps {
 }
 
 export function PortfolioOverview({ data }: PortfolioOverviewProps) {
-  const isTodayUp = data.todayReturnPct >= 0;
+  const hasToday = data.todayReturn !== null && data.todayReturnPct !== null;
+  const isTodayUp = (data.todayReturnPct ?? 0) >= 0;
+  const isCumulativeUp = data.cumulativeReturn >= 0;
 
   return (
     <div className="space-y-4">
@@ -18,23 +20,23 @@ export function PortfolioOverview({ data }: PortfolioOverviewProps) {
         <MetricCard
           title="总资产"
           value={formatCurrency(data.totalAssets)}
-          subtitle="示例组合"
+          subtitle="持仓市值"
           icon={Briefcase}
           delay={0.1}
         />
         <MetricCard
           title="今日收益"
-          value={formatCurrency(data.todayReturn)}
-          trend={isTodayUp ? "up" : "down"}
-          trendValue={formatPercent(data.todayReturnPct)}
-          subtitle="今日变动"
+          value={hasToday ? formatCurrency(data.todayReturn) : "暂无"}
+          trend={hasToday ? (isTodayUp ? "up" : "down") : "neutral"}
+          trendValue={hasToday ? formatPercent(data.todayReturnPct ?? 0) : undefined}
+          subtitle={hasToday ? "今日变动" : "数据源未提供日内收益"}
           icon={TrendingUp}
           delay={0.15}
         />
         <MetricCard
           title="累计收益"
           value={formatCurrency(data.cumulativeReturn)}
-          trend="up"
+          trend={isCumulativeUp ? "up" : "down"}
           trendValue={formatPercent(data.cumulativeReturnPct)}
           subtitle="成立以来"
           icon={PiggyBank}

@@ -100,28 +100,27 @@ export default function PortfolioPage() {
   // 资产历史走势状态
   const [historyPeriod, setHistoryPeriod] = useState<PortfolioHistoryPeriod>("1M");
   const [historyData, setHistoryData] = useState<PortfolioHistoryPoint[]>([]);
+  const [historyFailed, setHistoryFailed] = useState(false);
   const [historyView, setHistoryView] = useState<"value" | "rate">("value");
 
   // 今日收益归因状态
   const [attribution, setAttribution] = useState<AttributionResult | null>(null);
+  const [attributionFailed, setAttributionFailed] = useState(false);
   const skippedInitialHistoryRefresh = useRef(false);
   const skippedInitialAttributionRefresh = useRef(false);
 
   const fetchPortfolio = useCallback(() => {
     setLoading(true);
     setError(null);
-    Promise.all([
-      getRealPortfolio().catch(() => null),
-      getAllHoldings().catch(() => [] as HoldingItem[]),
-    ]).then(([summary, all]) => {
-      if (summary) {
+    Promise.all([getRealPortfolio(), getAllHoldings()])
+      .then(([summary, all]) => {
         setPortfolio(summary);
-      } else {
-        setError("加载持仓失败：请确认后端服务已启动（默认 http://localhost:8000）。");
-      }
-      setSoldHoldings(all.filter((h) => h.is_sold));
-      setLoading(false);
-    });
+        setSoldHoldings(all.filter((h) => h.is_sold));
+      })
+      .catch(() => {
+        setError("加载持仓失败：数据暂时不可用，请重新加载。");
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -137,7 +136,15 @@ export default function PortfolioPage() {
       skippedInitialHistoryRefresh.current = true;
       return;
     }
-    getPortfolioHistory(historyPeriod).then(setHistoryData);
+    getPortfolioHistory(historyPeriod)
+      .then((points) => {
+        setHistoryData(points);
+        setHistoryFailed(false);
+      })
+      .catch(() => {
+        setHistoryData([]);
+        setHistoryFailed(true);
+      });
   }, [historyPeriod, portfolio]);
 
   // 拉取今日收益归因（持仓变化后刷新）
@@ -146,7 +153,15 @@ export default function PortfolioPage() {
       skippedInitialAttributionRefresh.current = true;
       return;
     }
-    getPortfolioAttribution().then((r) => setAttribution(r));
+    getPortfolioAttribution()
+      .then((r) => {
+        setAttribution(r);
+        setAttributionFailed(false);
+      })
+      .catch(() => {
+        setAttribution(null);
+        setAttributionFailed(true);
+      });
   }, [portfolio]);
 
   // 操作反馈自动消失
@@ -515,8 +530,17 @@ export default function PortfolioPage() {
             </div>
           ) : (
             <div className="flex h-[240px] flex-col items-center justify-center text-center text-sm text-muted-foreground">
-              <p>暂无历史数据</p>
-              <p className="mt-1 text-xs">历史自今日开始记录，明天起这里会展示你的资产变化曲线。</p>
+              {historyFailed ? (
+                <>
+                  <p>数据暂时不可用，请重新加载。</p>
+                  <p className="mt-1 text-xs">资产历史读取失败，未使用任何替代数据。</p>
+                </>
+              ) : (
+                <>
+                  <p>暂无真实历史数据。</p>
+                  <p className="mt-1 text-xs">历史自今日开始记录，明天起这里会展示你的资产变化曲线。</p>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -632,7 +656,7 @@ export default function PortfolioPage() {
             </>
           ) : (
             <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
-              暂无持仓，无法分析今日收益
+              {attributionFailed ? "数据暂时不可用，请重新加载。" : "暂无真实持仓数据，无法分析今日收益。"}
             </div>
           )}
         </div>

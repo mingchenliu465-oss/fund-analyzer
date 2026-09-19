@@ -63,19 +63,30 @@ export default function PortfolioInsightsPage() {
     getPortfolioInsights(period)
       .then((result) => {
         setData(result);
-        if (!result) setError(true);
+      })
+      .catch(() => {
+        setData(null);
+        setError(true);
       })
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
     let cancelled = false;
-    getPortfolioInsights(period).then((result) => {
-      if (cancelled) return;
-      setData(result);
-      setError(!result);
-      setLoading(false);
-    });
+    getPortfolioInsights(period)
+      .then((result) => {
+        if (cancelled) return;
+        setData(result);
+        setError(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setData(null);
+        setError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
     return () => { cancelled = true; };
   }, [period]);
 

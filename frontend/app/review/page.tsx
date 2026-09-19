@@ -46,19 +46,19 @@ export default function ReviewPage() {
   const [dailyReview, setDailyReview] = useState<DailyReview | null>(null);
 
   useEffect(() => {
-    Promise.all([
-      getRealPortfolio().catch(() => null),
-      getAllHoldings().catch(() => [] as HoldingItem[]),
-    ])
+    Promise.all([getRealPortfolio(), getAllHoldings()])
       .then(([summary, holdings]) => {
         setPortfolio(summary);
         setAllHoldings(holdings);
       })
       .catch((err) => {
-        setError(err instanceof Error ? err.message : "加载失败");
+        setError(err instanceof Error ? err.message : "数据暂时不可用，请重新加载。");
       })
       .finally(() => setLoading(false));
-    getDailyReview().then(setDailyReview);
+    // 复盘生成失败时保持 null（页面显示"暂无"），不使用任何占位文案数据。
+    getDailyReview()
+      .then(setDailyReview)
+      .catch(() => setDailyReview(null));
   }, []);
 
   // ── Derived data ──

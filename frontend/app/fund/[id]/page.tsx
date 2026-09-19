@@ -112,7 +112,7 @@ export default function FundDetailPage() {
   }, [fund]);
 
   // ── React Query: K 线/净值走势数据（按 code + period 缓存，range 为纯视图状态）──
-  const { data: klineData = [], isFetching: klineFetching } = useQuery({
+  const { data: klineData = [], isFetching: klineFetching, isError: klineError } = useQuery({
     queryKey: ["kline", code, period],
     queryFn: () => getFundKlineHistory(code, period),
     enabled: !!fund && fund.code === code,
@@ -196,8 +196,8 @@ export default function FundDetailPage() {
   }
 
   const isUp = fund.changePct >= 0;
-  const estimatedManagerDays = Math.floor((Date.now() - new Date(fund.inceptionDate).getTime()) / 86400000);
-  const managerDays = fund.managerDays ?? (Number.isFinite(estimatedManagerDays) ? Math.max(0, estimatedManagerDays) : undefined);
+  // 数据源未提供基金经理任职天数时不显示，绝不用成立日期估算。
+  const managerDays = fund.managerDays;
   const latestDrawdown = drawdownData.length ? drawdownData[drawdownData.length - 1].drawdown : fund.metrics.maxDrawdown;
   const recoveryStatus = latestDrawdown >= -0.005 ? "已修复" : latestDrawdown > fund.metrics.maxDrawdown + 0.01 ? "正在修复中" : "回撤中";
   const recoveryClass = recoveryStatus === "已修复" ? "text-positive" : "text-negative";
@@ -485,14 +485,14 @@ export default function FundDetailPage() {
             />
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              暂无数据
+              {klineError ? "数据暂时不可用，请重新加载。" : "暂无真实数据。"}
             </div>
           )}
         </div>
         <p className="mt-2 text-[11px] text-muted-foreground">
           {fund.type === "ETF"
             ? "ETF 为场内实时行情（含开/高/低/收与成交量），盘中实时更新。"
-            : "场外基金每个交易日仅一个单位净值，此处展示净值走势（非 K 线）；净值为 T-1，交易日盘后更新。数据源暂时不可用时会显示本地兜底趋势。"}
+            : "场外基金每个交易日仅一个单位净值，此处展示净值走势（非 K 线）；净值为 T-1，交易日盘后更新。数据源不可用时此处不会显示任何替代数据。"}
         </p>
       </motion.div>
 

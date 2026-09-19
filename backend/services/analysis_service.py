@@ -92,8 +92,9 @@ def drawdown(code: str, period: NavPeriod = NavPeriod.ONE_YEAR) -> list[Drawdown
 def _load_rank_df() -> pd.DataFrame:
     """加载开放式基金与场内 ETF 排名数据。
 
-    两个排行榜接口并行调用（原串行最坏 20s+）；两者都失败时回退默认快照
-    构建排名表，保证 peers/ranking 等分析接口不为空。
+    两个排行榜接口并行调用（原串行最坏 20s+）；两者都失败时返回空表，
+    由上游 peers/ranking 返回空结果，前端显示"暂无数据"。
+    绝不使用硬编码基金池伪造排名。
     """
     cache_key = "rank_df"
     cached = fund_service._get_cache(cache_key)
@@ -125,15 +126,9 @@ def _load_rank_df() -> pd.DataFrame:
     df = df.sort_values("近1年", ascending=False).reset_index(drop=True)
 
     if df.empty:
-        # 排行榜数据源不可用：用默认快照构建排名表，避免分析接口为空
-        rows = [
-            {"基金代码": f.code, "基金简称": f.name, "近1年": f.one_year_return * 100, "source": "open"}
-            for f in fund_service._default_fund_list()
-            if f.one_year_return != 0
-        ]
-        df = pd.DataFrame(rows)
-        if not df.empty:
-            df = df.sort_values("近1年", ascending=False).reset_index(drop=True)
+        # 排行榜数据源不可用：返回空表。不构造任何替代排名数据。
+        fund_service._set_cache(cache_key, df, ttl=300)
+        return df
 
     fund_service._set_cache(cache_key, df, ttl=1800)
     return df
@@ -170,16 +165,11 @@ def peers(code: str) -> list[PeerComparison]:
     ]
 
     # 选择与目标收益最接近的基金
+    # 只保留有真实近一年收益的同类基金。凑不够 4 只就返回更少，
+    # 绝不用 0.0 收益填补空位、也不用"热度"补足数量。
     candidates_with_return = [(f, rank_map.get(f.code, 0.0)) for f in candidates if rank_map.get(f.code, 0.0) != 0.0]
     candidates_with_return.sort(key=lambda x: abs(x[1] - target_return))
     selected = [f for f, _ in candidates_with_return[:4]]
-
-    # 凑不够 4 只用热门基金补齐
-    if len(selected) < 4:
-        existing = {f.code for f in selected}
-        hot = [f for f in candidates if f.code not in existing]
-        hot.sort(key=lambda f: f.heat, reverse=True)
-        selected.extend(hot[: 4 - len(selected)])
 
     results: list[PeerComparison] = []
     for f in selected:

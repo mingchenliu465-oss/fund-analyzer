@@ -28,15 +28,6 @@ _DEFAULT_INDEX_CODES = {
     "中证全债": "H11001",
 }
 
-_DEFAULT_INDICES = [
-    MarketIndex(code="sh000001", name="上证指数", value="3,250.00", change=0.0, up=True),
-    MarketIndex(code="sz399001", name="深证成指", value="10,500.00", change=0.0, up=True),
-    MarketIndex(code="sh000300", name="沪深300", value="3,900.00", change=0.0, up=True),
-    MarketIndex(code="sz399006", name="创业板指", value="2,050.00", change=0.0, up=True),
-    MarketIndex(code="sh000905", name="中证500", value="5,700.00", change=0.0, up=True),
-    MarketIndex(code="H11001", name="中证全债", value="248.00", change=0.0, up=True),
-]
-
 _INDICES_REFRESH_LOCK = Lock()
 _INDICES_RETRY_AT = 0.0
 
@@ -391,7 +382,7 @@ def indices() -> list[MarketIndex]:
     后台刷新完成后，下一次 React Query 更新即可取得真实行情。
     """
     entry = _CACHE.get("market_indices")
-    snapshot = entry[0] if entry else _DEFAULT_INDICES
+    snapshot = entry[0] if entry else []
     if (entry is None or time.time() >= entry[1]) and time.monotonic() >= _INDICES_RETRY_AT:
         if _INDICES_REFRESH_LOCK.acquire(blocking=False):
             entry = _CACHE.get("market_indices")

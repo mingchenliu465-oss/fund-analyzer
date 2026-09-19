@@ -56,5 +56,16 @@ def portfolio_overview():
 
 
 def _ensure_exists(code: str) -> None:
-    if not any(f.code == code for f in fund_service.list_all()):
+    """校验基金存在。数据源不可用时返回 503，而不是误报 404。
+
+    基金列表为空说明外部数据源失败；此时把"取不到数据"说成"基金不存在"
+    会误导用户。两种情况必须区分。
+    """
+    funds = fund_service.list_all()
+    if not funds:
+        raise HTTPException(
+            status_code=503,
+            detail="基金列表数据暂时不可用，请稍后重试",
+        )
+    if not any(f.code == code for f in funds):
         raise HTTPException(status_code=404, detail=f"Fund {code} not found")

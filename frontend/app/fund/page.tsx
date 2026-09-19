@@ -12,10 +12,22 @@ import { FundSummary, formatCurrency, formatPercent, getAllFunds } from "@/servi
 export default function FundListPage() {
   const [funds, setFunds] = useState<FundSummary[]>([]);
   const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      getAllFunds(query).then(setFunds);
+      setLoading(true);
+      getAllFunds(query)
+        .then((rows) => {
+          setFunds(rows);
+          setFailed(false);
+        })
+        .catch(() => {
+          setFunds([]);
+          setFailed(true);
+        })
+        .finally(() => setLoading(false));
     }, 300);
     return () => clearTimeout(timer);
   }, [query]);
@@ -161,7 +173,11 @@ export default function FundListPage() {
               {filteredFunds.length === 0 && (
                 <tr>
                   <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
-                    未找到匹配的基金
+                    {loading
+                      ? "正在加载真实数据…"
+                      : failed
+                        ? "数据暂时不可用，请重新加载。"
+                        : "暂无真实数据。"}
                   </td>
                 </tr>
               )}
