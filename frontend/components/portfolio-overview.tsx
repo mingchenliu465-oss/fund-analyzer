@@ -1,7 +1,7 @@
 "use client";
 
 import { Briefcase, PiggyBank, TrendingUp, AlertTriangle } from "lucide-react";
-import { type PortfolioOverview, formatCurrency, formatPercent } from "@/services/fund";
+import { type PortfolioOverview, formatCurrency, formatPercentValue } from "@/services/fund";
 import { MetricCard } from "./metric-card";
 import { RiskScore } from "./risk-score";
 
@@ -28,7 +28,7 @@ export function PortfolioOverview({ data }: PortfolioOverviewProps) {
           title="今日收益"
           value={hasToday ? formatCurrency(data.todayReturn) : "暂无"}
           trend={hasToday ? (isTodayUp ? "up" : "down") : "neutral"}
-          trendValue={hasToday ? formatPercent(data.todayReturnPct ?? 0) : undefined}
+          trendValue={hasToday ? formatPercentValue(data.todayReturnPct ?? 0) : undefined}
           subtitle={hasToday ? "今日变动" : "数据源未提供日内收益"}
           icon={TrendingUp}
           delay={0.15}
@@ -37,7 +37,7 @@ export function PortfolioOverview({ data }: PortfolioOverviewProps) {
           title="累计收益"
           value={formatCurrency(data.cumulativeReturn)}
           trend={isCumulativeUp ? "up" : "down"}
-          trendValue={formatPercent(data.cumulativeReturnPct)}
+          trendValue={formatPercentValue(data.cumulativeReturnPct)}
           subtitle="成立以来"
           icon={PiggyBank}
           delay={0.2}

@@ -745,9 +745,26 @@ export async function getReturnRanking(code: string): Promise<ReturnRanking> {
 // Formatting helpers (presentational but commonly used alongside service data)
 // ---------------------------------------------------------------------------
 
+/**
+ * 把"小数比率"格式化为百分比：0.9802 → "+98.02%"。
+ * 只用于 ratio 语义字段（oneYearReturn / volatility / maxDrawdown / alpha / drawdown）。
+ */
 export function formatPercent(value: number, digits = 2): string {
   const sign = value > 0 ? "+" : "";
   return `${sign}${(value * 100).toFixed(digits)}%`;
+}
+
+/**
+ * 把"百分数"字段格式化为百分比：98.02 → "+98.02%"。
+ *
+ * 后端所有 `*_pct` 字段（total_profit_pct / change_pct / today_return_pct /
+ * change_pct / profit_pct）本身就是百分数，必须用这个函数格式化。
+ * 不要再对它们写 `* 0.01` 或 `* 100` 之类的换算 —— 单位不一致正是
+ * "首页累计收益率放大 100 倍" 的根因。
+ */
+export function formatPercentValue(value: number, digits = 2): string {
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value.toFixed(digits)}%`;
 }
 
 export function formatRatio(value: number, digits = 2): string {
