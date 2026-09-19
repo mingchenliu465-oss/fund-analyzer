@@ -538,7 +538,7 @@ export default function PortfolioPage() {
               ) : (
                 <>
                   <p>暂无真实历史数据。</p>
-                  <p className="mt-1 text-xs">历史自今日开始记录，明天起这里会展示你的资产变化曲线。</p>
+                  <p className="mt-1 text-xs">当前没有已记录的历史快照。</p>
                 </>
               )}
             </div>

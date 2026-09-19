@@ -454,13 +454,12 @@ def portfolio_summary() -> PortfolioSummary:
     total_profit = round(total_value - total_cost, 2) if total_cost > 0 else 0.0
     total_profit_pct = round(total_profit / total_cost * 100, 2) if total_cost > 0 else 0.0
 
-    # 记录当日快照（幂等 upsert），为资产历史曲线积累数据。
-    _upsert_snapshot(
-        total_value=total_value,
-        total_cost=total_cost,
-        profit=total_profit,
-        profit_rate=total_profit_pct,
-    )
+    # 纯读取：本函数由 GET /api/portfolio 调用，绝不能产生写操作。
+    # 快照写入已从这里移除（原先每个 GET 都会 upsert 一行，导致
+    # ① 读接口带副作用、破坏 HTTP 语义与缓存；
+    # ② 历史曲线只由"用户恰好打开过页面的日子"构成，数据严重有偏）。
+    # 需要写入快照时必须由显式的写路径（专用接口或定时任务）调用
+    # _upsert_snapshot，不得挂在 GET 上。
 
     return PortfolioSummary(
         total_cost=round(total_cost, 2),
@@ -485,7 +484,8 @@ def _upsert_snapshot(
 ) -> None:
     """把当日组合快照写入 portfolio_snapshots（幂等 upsert）。
 
-    独立成函数，未来可被定时任务复用（保留扩展点）。
+    ⚠️ 只能由显式的写路径调用（专用写接口 / 定时任务）。
+    绝不可从 GET /api/portfolio 之类的只读路径调用。
     """
     today = date.today().isoformat()
     conn = get_connection()

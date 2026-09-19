@@ -30,7 +30,7 @@ PAYLOAD = dict(fund_code="000001", fund_name="测试基金", fund_type="股票�
                buy_date="2026-08-01", buy_amount=100, buy_nav=1, shares=100, fee=1)
 
 
-def test_holdings_lifecycle_and_snapshot(client):
+def test_holdings_lifecycle_without_implicit_snapshot(client):
     created = client.post("/api/portfolio/holdings", json=PAYLOAD)
     assert created.status_code == 201
     url = "/api/portfolio/holdings/" + str(created.json()["id"])
@@ -38,9 +38,9 @@ def test_holdings_lifecycle_and_snapshot(client):
     for _ in range(2):
         summary = client.get("/api/portfolio").json()
         assert summary["total_profit"] == 99
+    # GET /api/portfolio 是纯读取：不再顺带写入当日快照，所以历史应为空。
     history = client.get("/api/portfolio/history?period=ALL").json()["points"]
-    assert len(history) == 1
-    assert history[0]["total_value"] == 200
+    assert history == []
     attribution = client.get("/api/portfolio/attribution")
     assert attribution.status_code == 200
     assert attribution.json()["today_return"] == 10
@@ -58,6 +58,23 @@ def test_holdings_lifecycle_and_snapshot(client):
 def test_invalid_amount_does_not_write(client):
     assert client.post("/api/portfolio/holdings", json={**PAYLOAD, "shares": -1}).status_code == 422
     assert client.get("/api/portfolio/holdings").json() == []
+
+
+def test_get_portfolio_never_writes_snapshots(client):
+    """GET /api/portfolio 必须是纯读取，不能产生任何写操作。"""
+    def snapshot_count() -> int:
+        conn = database.get_connection()
+        try:
+            return conn.execute(
+                "SELECT COUNT(*) AS c FROM portfolio_snapshots"
+            ).fetchone()["c"]
+        finally:
+            conn.close()
+
+    assert snapshot_count() == 0
+    for _ in range(3):
+        assert client.get("/api/portfolio").status_code == 200
+    assert snapshot_count() == 0
 
 
 def test_drip_creates_weekly_lots(client, monkeypatch):
