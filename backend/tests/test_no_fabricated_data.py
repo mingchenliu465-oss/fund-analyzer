@@ -17,7 +17,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api import analysis
-from models.fund import FundSummary
+from models.fund import FundSummary, Sector
+from models.market import NavPeriod
 from services import analysis_service, fund_service
 from services import market_service
 
@@ -121,6 +122,94 @@ def test_analysis_api_returns_404_for_unknown_fund():
         with TestClient(app) as client:
             response = client.get("/api/analysis/peers/999999")
     assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# 假净值 → 假指标 整条链必须不存在
+# ---------------------------------------------------------------------------
+
+
+def nav_frame(values):
+    return pd.DataFrame(
+        {
+            "净值日期": pd.to_datetime([f"2026-01-{i + 1:02d}" for i in range(len(values))]),
+            "单位净值": values,
+            "日增长率": [0.0] * len(values),
+        }
+    )
+
+
+@pytest.mark.parametrize("rows", [0, 1, 2])
+def test_metrics_refuse_to_invent_values_without_enough_nav(rows):
+    """净值样本不足时必须报错，不得返回 volatility/beta 之类的设定值。"""
+    with pytest.raises(ValueError):
+        fund_service._metrics_from_nav(nav_frame([1.0] * rows), "股票型")
+
+
+@pytest.mark.parametrize("rows", [0, 1])
+def test_returns_refuse_to_invent_values_without_enough_nav(rows):
+    with pytest.raises(ValueError):
+        fund_service._returns_from_nav(nav_frame([1.0] * rows))
+
+
+def test_get_by_code_refuses_insufficient_nav_series():
+    """净值只有 2 条时无法算波动率，详情接口必须报错而不是编造指标。"""
+    with patch.object(fund_service, "_load_fund_list", return_value=[stub_fund()]), patch.object(
+        fund_service, "_fetch_nav_history", return_value=nav_frame([1.0, 1.1])
+    ), patch.object(fund_service, "_fetch_real_sectors", return_value=None), patch.object(
+        fund_service, "_fetch_real_holdings", return_value=None
+    ), patch.object(fund_service, "_fetch_basic_info", return_value={}):
+        with pytest.raises(ValueError):
+            fund_service.get_by_code("000001")
+
+
+def test_get_by_code_computes_metrics_from_real_nav_only():
+    """有足够真实净值时，指标必须来自这条真实序列，且不编造从业天数。"""
+    values = [1.0, 1.1, 1.2, 1.15, 1.3]
+    with patch.object(fund_service, "_load_fund_list", return_value=[stub_fund()]), patch.object(
+        fund_service, "_fetch_nav_history", return_value=nav_frame(values)
+    ), patch.object(
+        fund_service, "_fetch_real_sectors", return_value=None
+    ), patch.object(
+        fund_service, "_fetch_real_holdings", return_value=None
+    ), patch.object(
+        fund_service, "_fetch_basic_info", return_value={}
+    ):
+        detail = fund_service.get_by_code("000001")
+
+    assert detail.nav == round(values[-1], 4)
+    assert detail.metrics.volatility > 0
+    assert detail.metrics.max_drawdown <= 0
+    # 数据源不提供任职起始日 → 必须是 None，而不是用成立日期估算的数字
+    assert detail.manager_days is None
+    # 未取到行业/重仓数据 → 留空，而不是填充默认持仓
+    assert detail.sectors == []
+    assert detail.top_holdings == []
+
+
+def test_get_by_code_keeps_real_sectors_when_available():
+    sectors = [Sector(name="金融", weight=30.0, color="#0071e3")]
+    with patch.object(fund_service, "_load_fund_list", return_value=[stub_fund()]), patch.object(
+        fund_service, "_fetch_nav_history", return_value=nav_frame([1.0, 1.1, 1.2])
+    ), patch.object(
+        fund_service, "_fetch_real_sectors", return_value=sectors
+    ), patch.object(
+        fund_service, "_fetch_real_holdings", return_value=None
+    ), patch.object(
+        fund_service, "_fetch_basic_info", return_value={}
+    ):
+        detail = fund_service.get_by_code("000001")
+    assert [s.name for s in detail.sectors] == ["金融"]
+
+
+def test_drawdown_is_empty_when_nav_source_returns_nothing():
+    with patch.object(fund_service, "nav_history", return_value=EMPTY_NAV):
+        assert analysis_service.drawdown("000001", NavPeriod.ONE_YEAR) == []
+
+
+def test_market_kline_is_empty_when_nav_source_returns_nothing():
+    with patch.object(fund_service, "_fetch_nav_history", return_value=EMPTY_NAV):
+        assert market_service.kline("000001", NavPeriod.DAILY, "1Y") == []
 
 
 # ---------------------------------------------------------------------------

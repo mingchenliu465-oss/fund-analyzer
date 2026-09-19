@@ -455,9 +455,12 @@ def _parse_date(date_str: str) -> str:
 
 
 def _returns_from_nav(nav_df: pd.DataFrame) -> FundReturns:
-    """基于净值序列计算日/周/月/年收益。"""
-    if nav_df.empty or len(nav_df) < 2:
-        return FundReturns(daily=0.0, weekly=0.0, monthly=0.0, yearly=0.0)
+    """基于净值序列计算日/周/月/年收益。
+
+    净值点不足 2 个时没有可比较的前值，拒绝计算 —— 不返回 0 冒充收益。
+    """
+    if len(nav_df) < 2:
+        raise ValueError("净值数据不足，无法计算收益")
 
     nav = nav_df["单位净值"].astype(float)
     dates = nav_df["净值日期"]
@@ -471,7 +474,7 @@ def _returns_from_nav(nav_df: pd.DataFrame) -> FundReturns:
         past_nav = float(past["单位净值"].iloc[-1])
         return (latest - past_nav) / past_nav if past_nav else 0.0
 
-    daily = (latest - float(nav.iloc[-2])) / float(nav.iloc[-2]) if len(nav) >= 2 else 0.0
+    daily = (latest - float(nav.iloc[-2])) / float(nav.iloc[-2])
     weekly = _pct_for_days(7)
     monthly = _pct_for_days(30)
     yearly = _pct_for_days(365)
@@ -480,26 +483,21 @@ def _returns_from_nav(nav_df: pd.DataFrame) -> FundReturns:
 
 
 def _metrics_from_nav(nav_df: pd.DataFrame, ftype: str) -> FundMetrics:
-    """基于净值序列计算风险指标。"""
-    if nav_df.empty or len(nav_df) < 2:
-        risk_level, risk_score = _risk_profile(ftype)
-        return FundMetrics(
-            max_drawdown=0.0,
-            volatility=0.02,
-            sharpe=0.0,
-            risk_level=risk_level,
-            risk_score=risk_score,
-            alpha=0.0,
-            beta=0.5,
-            sortino=0.0,
-            information_ratio=0.0,
-        )
+    """基于净值序列计算风险指标。
+
+    净值点少于 3 个（即不足 2 个收益率样本）时统计量无定义，直接报错 ——
+    绝不返回凭空设定的 volatility=0.02 / beta=0.5 / max_drawdown=0.0。
+    """
+    if len(nav_df) < 3:
+        raise ValueError("净值数据不足，无法计算风险指标")
 
     nav = nav_df["单位净值"].astype(float).values
     returns = nav[1:] / nav[:-1] - 1
+    if len(returns) < 2:
+        raise ValueError("净值数据不足，无法计算波动率")
 
     # 年化波动率（按 252 个交易日）
-    volatility = float(returns.std() * (252**0.5)) if len(returns) > 1 else 0.02
+    volatility = float(returns.std() * (252**0.5))
 
     # 最大回撤
     peak = nav[0]
@@ -922,19 +920,17 @@ def get_by_code(code: str) -> FundDetail:
         basic_info = _f_basic.result()
 
     # 4. 计算当前净值与涨跌幅。
-    #    没有真实净值序列时不能给出任何收益率 / 波动率 / 回撤 / 夏普比率：
-    #    那些指标全部由净值序列推导，缺失净值就没有指标可言。直接报错，
-    #    由前端展示"数据暂时不可用"，绝不填充 0、估算值或生成序列。
-    if nav_df.empty:
-        raise ValueError(f"暂无基金 {upper} 的真实净值数据")
+    #    全部风险指标（收益率 / 波动率 / 回撤 / 夏普）都由净值序列推导：
+    #    净值不足 3 条时统计量无定义，因此直接报错，由前端展示
+    #    "数据暂时不可用"。绝不填充 0、估算值或生成的替代序列。
+    if len(nav_df) < 3:
+        raise ValueError(
+            f"基金 {upper} 的真实净值数据不足（{len(nav_df)} 条），无法计算风险指标"
+        )
 
     latest_nav = float(nav_df["单位净值"].iloc[-1])
-    if len(nav_df) >= 2:
-        prev_nav = float(nav_df["单位净值"].iloc[-2])
-        change_pct = (latest_nav - prev_nav) / prev_nav * 100
-    else:
-        # 只有一条净值时无法计算日涨跌，保持 0（无前值可比较）。
-        change_pct = 0.0
+    prev_nav = float(nav_df["单位净值"].iloc[-2])
+    change_pct = (latest_nav - prev_nav) / prev_nav * 100
 
     returns = _returns_from_nav(nav_df)
     metrics = _metrics_from_nav(nav_df, ftype)
