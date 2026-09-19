@@ -27,16 +27,16 @@ class PeerComparison(BaseModel):
     code: str
     name: str
     type: str
-    one_year_return: float = Field(alias="oneYearReturn")
-    volatility: float
-    sharpe: float
-    risk_level: str = Field(alias="riskLevel")
+    one_year_return: float | None = Field(default=None, alias="oneYearReturn")
+    volatility: float | None = None
+    sharpe: float | None = None
+    risk_level: str | None = Field(default=None, alias="riskLevel")
 
 
 class ReturnRanking(BaseModel):
     rank: int
     total: int
-    percentile: float
+    percentile: float | None = None
 
 
 class AllocationItem(BaseModel):
@@ -48,14 +48,14 @@ class AllocationItem(BaseModel):
 class PortfolioOverview(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    total_assets: float = Field(alias="totalAssets")
-    today_return: float = Field(alias="todayReturn")
-    today_return_pct: float = Field(alias="todayReturnPct")
-    cumulative_return: float = Field(alias="cumulativeReturn")
-    cumulative_return_pct: float = Field(alias="cumulativeReturnPct")
+    total_assets: float | None = Field(default=None, alias="totalAssets")
+    today_return: float | None = Field(default=None, alias="todayReturn")
+    today_return_pct: float | None = Field(default=None, alias="todayReturnPct")
+    cumulative_return: float | None = Field(default=None, alias="cumulativeReturn")
+    cumulative_return_pct: float | None = Field(default=None, alias="cumulativeReturnPct")
     allocation: list[AllocationItem]
-    risk_level: str = Field(alias="riskLevel")
-    risk_score: float = Field(alias="riskScore")
+    risk_level: str | None = Field(default=None, alias="riskLevel")
+    risk_score: float | None = Field(default=None, alias="riskScore")
 
 
 class HoldStructurePoint(BaseModel):

@@ -17,10 +17,6 @@ function safeFormatPercent(v: number | null | undefined, digits = 0): string {
 export function RiskIndicatorTable({ metrics }: RiskIndicatorTableProps) {
   const items = [
     { label: "夏普比率", value: safeFormatRatio(metrics.sharpe), desc: "风险调整后收益" },
-    { label: "索提诺比率", value: safeFormatRatio(metrics.sortino), desc: "下行风险调整收益" },
-    { label: "Alpha", value: safeFormatPercent(metrics.alpha, 2), desc: "超额收益" },
-    { label: "Beta", value: safeFormatRatio(metrics.beta), desc: "相对市场弹性" },
-    { label: "信息比率", value: safeFormatRatio(metrics.informationRatio), desc: "主动管理能力" },
     { label: "最大回撤", value: safeFormatPercent(metrics.maxDrawdown), desc: "历史极端亏损" },
   ];
 

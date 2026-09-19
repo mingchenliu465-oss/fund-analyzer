@@ -85,7 +85,7 @@ const quickLinks = [
 const emptyPortfolio: PortfolioOverviewData = {
   totalAssets: 0, todayReturn: null, todayReturnPct: null,
   cumulativeReturn: 0, cumulativeReturnPct: 0,
-  allocation: [], riskLevel: "暂无", riskScore: 0,
+  allocation: [], riskLevel: null, riskScore: null,
 };
 
 const MARKET_INDEX_CODE_BY_NAME: Record<string, string> = {

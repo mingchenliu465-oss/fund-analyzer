@@ -15,10 +15,17 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setattr(database, "DB_PATH", tmp_path / "portfolio.db")
     database.init_db()
     monkeypatch.setattr(service, "_resolve_fund_name", lambda code, name: name)
-    monkeypatch.setattr(service, "_build_nav_map", lambda: {"000001": 2})
-    monkeypatch.setattr(service.fund_service, "get_by_code", lambda code: SimpleNamespace(nav=2))
+    # 净值映射现在携带观测日（code -> (nav, nav_date)）。
+    monkeypatch.setattr(service, "_build_nav_map", lambda: {"000001": (2, "2026-09-18")})
+    monkeypatch.setattr(
+        service.fund_service, "get_by_code",
+        lambda code: SimpleNamespace(nav=2, nav_date="2026-09-18"),
+    )
     monkeypatch.setattr(service.fund_service, "_load_fund_list", lambda: [])
     monkeypatch.setattr(service, "_open_fund_nav_change", lambda code: (2, 1.9, 100 / 19))
+    # 这里隔离交易日历：本文件验证的是持仓/组合的管道，freshness 判定本身由
+    # test_nav_freshness.py 用真实/注入日历单独覆盖。
+    monkeypatch.setattr(service.fund_service, "is_current_nav", lambda *_: True)
     app = FastAPI()
     app.include_router(portfolio.router, prefix="/api")
     app.include_router(review.router, prefix="/api")

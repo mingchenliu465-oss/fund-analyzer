@@ -37,8 +37,10 @@ def _is_index(code: str) -> bool:
 
 
 def _is_etf(code: str) -> bool:
-    code = code.strip()
-    return code.startswith(("51", "15", "56", "58", "16")) and len(code) == 6
+    """场内 ETF 判定：委托给 fund_service 的权威名录，不用代码前缀猜。"""
+    from services import fund_service
+
+    return fund_service._is_etf_code(code)
 
 
 def _format_date(dt: datetime, period: NavPeriod) -> str:
@@ -70,8 +72,7 @@ def _resample_to_kline(nav_df: pd.DataFrame, period: NavPeriod) -> list[KlinePoi
     """将净值/OHLCV 数据转为 K线点。
 
     ETF：有真实 OHLCV 列，按 period 聚合。
-    开放基金：仅有单位净值列，生成伪 K 线（open≈close≈nav，无成交量），
-    前端 K 线图会正常渲染为走势线。
+    开放基金：只有单位净值，没有真实 OHLCV，因此不生成伪 K 线。
     """
     if nav_df.empty:
         return []
@@ -95,14 +96,8 @@ def _resample_to_kline(nav_df: pd.DataFrame, period: NavPeriod) -> list[KlinePoi
             agg_spec["turnover"] = "sum"
         resampled = df.resample(freq).agg(agg_spec).dropna()
     else:
-        # 开放基金: 基于单位净值生成伪 OHLC（走势线模式）
-        nav_series = df["单位净值"].astype(float)
-        resampled = nav_series.resample(freq).ohlc()
-        resampled["volume"] = 0.0
-        resampled["turnover"] = 0.0
-        resampled = resampled.dropna()
-        has_volume = True
-        has_turnover = True
+        # 单位净值不是 OHLC 行情，不能伪装成 K 线或零成交量行情。
+        return []
 
     points: list[KlinePoint] = []
     for dt, row in resampled.iterrows():
@@ -126,9 +121,10 @@ _ETF_FULL_DAYS = 5475
 
 
 def _etf_kline(code: str, period: NavPeriod) -> list[KlinePoint]:
+    """场内 ETF 的 K 线：数据来源是**二级市场行情**，不是基金净值。"""
     from services import fund_service
 
-    df = fund_service._fetch_etf_history(code, days=_ETF_FULL_DAYS)
+    df = fund_service._fetch_etf_price_history(code, days=_ETF_FULL_DAYS)
     return _resample_to_kline(df, period)
 
 
@@ -264,17 +260,17 @@ def kline(
     period: NavPeriod = NavPeriod.DAILY,
     range_: str = "1Y",
 ) -> list[KlinePoint]:
-    """返回基金的 K 线/净值走势数据（返回全量历史）。
+    """返回基金的 K 线数据（返回全量历史）。
 
     - period：聚合粒度（日K/周K/月K，也向后兼容 1M/3M/1Y 等旧值）
     - range_：保留参数（向后兼容），后端不再用它截断；时间范围由前端
       "初始可视窗口"控制，用户缩小图表即可看到更早历史（修复缩放问题）。
 
-    ETF: 真实 OHLCV 数据（含成交量）。
-    开放基金: 基于净值重采样的折线点（open≈high≈low≈close≈nav，无成交量），
-              前端应按"净值走势"（折线/面积）渲染，而非实体 K 线。
+    场内 ETF: 真实二级市场 OHLCV（来自 _fetch_etf_price_history，纯市价）。
+    开放基金/LOF: 没有真实 OHLCV，返回空列表；应使用净值历史接口。
 
-    通过代码前缀判断 ETF/非 ETF，不触发 get_by_code() 避免冗余 akshare 调用。
+    ETF 身份查真实名录（fund_service._is_etf_code），不用代码前缀猜 ——
+    前缀法会把 LOF 与场外基金（如 519066）当成 ETF，从而拿市场价充当净值。
     """
     from services import fund_service
 
@@ -284,11 +280,11 @@ def kline(
     if _is_index(code):
         return _index_kline(code, period)
 
-    # 通过代码前缀直接判断是否 ETF，无需调 get_by_code()
     if _is_etf(upper):
         return _etf_kline(upper, period)
 
-    # 开放基金: 获取全量净值历史，按周期聚合为折线点
+    # 开放基金/LOF: 只有净值、没有 OHLC，_resample_to_kline 会返回空列表，
+    # 由前端显示"历史行情暂不可用"，而不是编造 K 线。
     try:
         nav_df = fund_service._fetch_nav_history(upper)
         return _resample_to_kline(nav_df, period)

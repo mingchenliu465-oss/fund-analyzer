@@ -48,12 +48,24 @@ def test_largest_loss_matches_summary():
 
 @pytest.mark.parametrize("code", ["000001", "510300"])
 @pytest.mark.parametrize("quote", [(0, 0, 0), (float("nan"), 2, 0), (2, -1, 0)])
-def test_missing_quote_keeps_assets_and_marks_pending(code, quote):
+def test_missing_quote_is_reported_unavailable_not_as_a_stale_value(code, quote):
+    """Unusable quotes must not be valued at all.
+
+    The holding has current_nav=2, so a fallback would produce a plausible
+    looking 200. That is exactly the failure mode this asserts against: no
+    total_assets, no 0% return, and an explicit 'unavailable' status.
+    """
     result = calculate([holding(code)], {code: quote})
-    assert result["summary"]["total_assets"] == 200
+    assert result["summary"]["total_assets"] is None
+    assert result["summary"]["today_return"] is None
+    assert result["summary"]["today_return_pct"] is None
+    assert result["summary"]["status"] == "unavailable"
     assert result["summary"]["has_stale_nav"] is True
-    assert result["contributions"][0]["nav_stale"] is True
-    assert result["today_return"] == 0
+    assert result["today_return"] is None
+    assert result["today_return_pct"] is None
+    assert result["yesterday_value"] is None
+    # A holding with no usable quote contributes nothing rather than a zero row.
+    assert result["contributions"] == []
 
 
 def test_review_weights_use_assets_even_when_returns_negative():

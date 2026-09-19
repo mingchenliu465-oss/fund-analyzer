@@ -109,10 +109,12 @@ def get_fund_nav_history(
     if df.empty:
         return []
 
-    nav_values = df["单位净值"].astype(float).values
-    base = float(nav_values[0]) if nav_values[0] != 0 else 1.0
+    # nav 按单位净值展示（用户理解的"净值"就是它）；normalized 是业绩曲线，
+    # 必须用累计净值，否则每次分红都会在曲线上画出一段不存在的下跌。
+    basis = fund_service.total_return_series(df).astype(float).values
+    base = float(basis[0]) if basis[0] != 0 else 1.0
     points: list[NavPoint] = []
-    for _, row in df.iterrows():
+    for index, (_, row) in enumerate(df.iterrows()):
         dt = row["净值日期"]
         nav = float(row["单位净值"])
         label = dt.strftime("%Y-%m" if period in (NavPeriod.ONE_YEAR, NavPeriod.THREE_YEAR) else "%m-%d")
@@ -120,7 +122,7 @@ def get_fund_nav_history(
             NavPoint(
                 date=label,
                 nav=round(nav, 4),
-                normalized=round(nav / base, 4),
+                normalized=round(float(basis[index]) / base, 4),
             )
         )
     return points

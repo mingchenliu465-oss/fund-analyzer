@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { type PeerComparison, formatPercent } from "@/services/fund";
+import { type PeerComparison, formatPercent, formatRatio } from "@/services/fund";
 
 interface PeerComparisonProps {
   data: PeerComparison[];
@@ -105,8 +105,10 @@ export function PeerComparison({ data, targetCode }: PeerComparisonProps) {
                 <td className="py-2.5 text-right text-muted-foreground">
                   {formatPercent(item.volatility)}
                 </td>
-                <td className="py-2.5 text-right">{item.sharpe.toFixed(2)}</td>
-                <td className="py-2.5 text-right text-muted-foreground">{item.riskLevel}</td>
+                {/* 后端在无基准/方差为 0 时不提供夏普 -> null，必须显示"—"，
+                    不能 toFixed 崩溃，也不能显示成 0。 */}
+                <td className="py-2.5 text-right">{formatRatio(item.sharpe)}</td>
+                <td className="py-2.5 text-right text-muted-foreground">{item.riskLevel ?? "—"}</td>
               </tr>
             ))}
           </tbody>

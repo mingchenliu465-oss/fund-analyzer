@@ -144,7 +144,7 @@ export default function FundListPage() {
                     {formatPercent(fund.oneYearReturn)}
                   </td>
                   <td className="px-3 py-3 text-right">
-                    <Badge variant="outline">{fund.riskLevel}</Badge>
+                    <Badge variant="outline">{fund.riskLevel ?? "—"}</Badge>
                   </td>
                   <td className="px-3 py-3 text-right tabular-nums text-muted-foreground">
                     {fund.size}

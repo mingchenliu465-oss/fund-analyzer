@@ -44,8 +44,8 @@ export function PortfolioOverview({ data }: PortfolioOverviewProps) {
         />
         <MetricCard
           title="风险评分"
-          value={data.riskLevel}
-          subtitle={`评分 ${data.riskScore}`}
+          value={data.riskScore == null ? "暂无" : (data.riskLevel ?? "暂无")}
+          subtitle={data.riskScore == null ? "无可复现的综合评分" : `评分 ${data.riskScore}`}
           icon={AlertTriangle}
           delay={0.25}
         />

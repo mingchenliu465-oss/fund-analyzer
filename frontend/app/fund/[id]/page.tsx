@@ -239,7 +239,7 @@ export default function FundDetailPage() {
                 <span className="text-muted-foreground">{fund.company}</span>
                 <span className="text-muted-foreground">·</span>
                 <Badge variant={getRiskBadgeVariant(fund.metrics.riskScore)}>
-                  风险 {fund.metrics.riskLevel}
+                  风险 {fund.metrics.riskLevel ?? "暂无"}
                 </Badge>
                 <Badge variant="outline" className="inline-flex items-center gap-1">
                   <User className="h-3 w-3" />
@@ -388,9 +388,16 @@ export default function FundDetailPage() {
               <div className="text-xs text-muted-foreground">{item.label}</div>
               <div
                 className={`mt-1 text-xl font-semibold tabular-nums ${
-                  item.value >= 0 ? "text-positive" : "text-negative"
+                  item.value == null
+                    ? "text-muted-foreground"
+                    : item.value >= 0
+                      ? "text-positive"
+                      : "text-negative"
                 }`}
               >
+                {/* 历史不足时后端返回 null。旧代码直接 item.value >= 0，
+                    null 会被强制转成 0 并渲染成绿色的 "+0.00%" —— 把"算不出来"
+                    伪装成一个真实的持平收益。 */}
                 {formatPercent(item.value)}
               </div>
             </div>
@@ -770,8 +777,9 @@ function MetaItem({ label, value }: { label: string; value: string }) {
   );
 }
 
-function getRiskBadgeVariant(score: number): "positive" | "warning" | "negative" | "default" {
-  if (isNaN(score) || score < 0) return "default";
+function getRiskBadgeVariant(score: number | null): "positive" | "warning" | "negative" | "default" {
+  // 没有真实评分时使用中性样式：绝不把 null 当成 0（那会显示成"风险最低"）。
+  if (score == null || isNaN(score) || score < 0) return "default";
   if (score < 30) return "positive";
   if (score < 60) return "warning";
   if (score < 80) return "default";

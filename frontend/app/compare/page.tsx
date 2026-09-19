@@ -378,7 +378,9 @@ export default function ComparePage() {
                       )}
                     </td>
                     {metrics.map((m) => {
-                      let value: number | undefined;
+                      // 后端在算不出来时返回 null（如方差为 0 的夏普、无基准的指标）。
+                      // 必须按 null 判空：旧代码只判 undefined，null 会漏进 m.format()。
+                      let value: number | null | undefined;
                       if (fund.detail) {
                         if (m.key === "oneYearReturn") value = fund.detail.returns.yearly;
                         else if (m.key === "maxDrawdown") value = fund.detail.metrics.maxDrawdown;
@@ -389,14 +391,14 @@ export default function ComparePage() {
                         <td
                           key={m.key}
                           className={`px-4 py-3 text-right tabular-nums font-medium ${
-                            value !== undefined
-                              ? value >= 0
+                            value == null
+                              ? ""
+                              : value >= 0
                                 ? "text-positive"
                                 : "text-negative"
-                              : ""
                           }`}
                         >
-                          {value !== undefined ? m.format(value) : "—"}
+                          {value == null ? "—" : m.format(value)}
                         </td>
                       );
                     })}

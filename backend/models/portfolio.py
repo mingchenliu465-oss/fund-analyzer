@@ -88,16 +88,20 @@ class HoldingItem(BaseModel):
     cost: float | None = None
     profit: float | None = None
     profit_pct: float | None = None
-    # 净值状态：True 表示当前净值待更新（用了最近一次有效净值或买入净值兜底）
+    # 净值状态：True 表示当前净值不可用（数据源取不到，或数据已过期）。
+    # 无论哪种原因，都不得用买入净值 / 上次已知值 / 0 兜底成"当前净值"。
     nav_stale: bool = False
+    # current_nav 的真实观测日（净值日期）。nav_stale=True 时仍可保留它，
+    # 用于说明"最后一次已知数据是哪天"，而不是声称那是今天的净值。
+    nav_date: str | None = None
 
 
 class PortfolioSummary(BaseModel):
     """组合概览。"""
     total_cost: float = 0
-    total_value: float = 0
-    total_profit: float = 0
-    total_profit_pct: float = 0
+    total_value: float | None = None
+    total_profit: float | None = None
+    total_profit_pct: float | None = None
     holding_count: int = 0
     holdings: list[HoldingItem] = []
     # 组合中至少一只持仓使用了过期/买入净值估值。

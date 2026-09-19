@@ -106,7 +106,7 @@ def _build_segments(context: dict) -> list[dict]:
             segments.append(
                 _seg(
                     "风险",
-                    f"组合风险等级为 {structure['risk_level']}（评分 {structure.get('risk_score', 0)}），"
+                    f"组合风险等级为 {structure['risk_level']}（评分 {structure.get('risk_score')}），"
                     f"请结合自身风险承受能力评估。",
                 )
             )
@@ -126,7 +126,7 @@ def generate_daily_review(provider: str = "llm") -> dict:
 
     # ── 收集上下文（全部来自现有真实数据）──
     attribution = None
-    structure = {"equity_pct": 0.0, "bond_pct": 0.0, "risk_level": None, "risk_score": 0}
+    structure = {"equity_pct": 0.0, "bond_pct": 0.0, "risk_level": None, "risk_score": None}
     try:
         attribution = portfolio_service.attribution()
         if attribution and attribution.get("contributions"):
@@ -146,8 +146,8 @@ def generate_daily_review(provider: str = "llm") -> dict:
             structure = {
                 "equity_pct": equity_pct,
                 "bond_pct": bond_pct,
-                "risk_level": _derive_risk_level(equity_pct),
-                "risk_score": _derive_risk_score(equity_pct),
+                "risk_level": None,
+                "risk_score": None,
             }
     except Exception as exc:
         logger.warning("Daily review data collection failed: %s", exc)
@@ -212,27 +212,3 @@ def _portfolio_fund_type(code: str) -> str:
         return f.type if f else ""
     except Exception:
         return ""
-
-
-def _derive_risk_level(equity_pct: float) -> str:
-    if equity_pct >= 70:
-        return "高"
-    if equity_pct >= 40:
-        return "中高"
-    if equity_pct >= 20:
-        return "中"
-    if equity_pct > 0:
-        return "中低"
-    return "低"
-
-
-def _derive_risk_score(equity_pct: float) -> int:
-    if equity_pct >= 70:
-        return 80
-    if equity_pct >= 40:
-        return 60
-    if equity_pct >= 20:
-        return 40
-    if equity_pct > 0:
-        return 20
-    return 10

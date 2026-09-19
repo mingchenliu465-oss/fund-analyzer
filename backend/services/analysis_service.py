@@ -42,7 +42,8 @@ def drawdown(code: str, period: NavPeriod = NavPeriod.ONE_YEAR) -> list[Drawdown
 
     df = df.sort_values("净值日期").reset_index(drop=True)
     df["净值日期"] = pd.to_datetime(df["净值日期"])
-    df["单位净值"] = df["单位净值"].astype(float)
+    # 回撤必须基于累计净值：单位净值在除息日跳水是分红，不是回撤。
+    df["收益基准"] = fund_service.total_return_series(df).astype(float)
 
     # 按 period 聚合：取每个桶内的最大回撤（最负值）
     if period in (NavPeriod.ONE_YEAR, NavPeriod.THREE_YEAR, NavPeriod.MONTHLY, NavPeriod.YEARLY):
@@ -58,7 +59,7 @@ def drawdown(code: str, period: NavPeriod = NavPeriod.ONE_YEAR) -> list[Drawdown
     points: list[DrawdownPoint] = []
     global_peak = 0.0
     for bucket, group in df.groupby("bucket", sort=True):
-        nav_values = group["单位净值"].values
+        nav_values = group["收益基准"].values
         bucket_max_dd = 0.0
         for v in nav_values:
             if v > global_peak:
@@ -138,6 +139,8 @@ def peers(code: str) -> list[PeerComparison]:
 
     rank_map = _rank_dict()
     target_return = rank_map.get(upper, target.one_year_return)
+    if target_return is None:
+        return []
 
     # 同类候选
     candidates = [
@@ -150,23 +153,23 @@ def peers(code: str) -> list[PeerComparison]:
     # 选择与目标收益最接近的基金
     # 只保留有真实近一年收益的同类基金。凑不够 4 只就返回更少，
     # 绝不用 0.0 收益填补空位、也不用"热度"补足数量。
-    candidates_with_return = [(f, rank_map.get(f.code, 0.0)) for f in candidates if rank_map.get(f.code, 0.0) != 0.0]
+    candidates_with_return = [
+        (f, rank_map[f.code]) for f in candidates if f.code in rank_map
+    ]
     candidates_with_return.sort(key=lambda x: abs(x[1] - target_return))
     selected = [f for f, _ in candidates_with_return[:4]]
 
     results: list[PeerComparison] = []
     for f in selected:
-        one_year = rank_map.get(f.code, 0.0)
-        vol = fund_service._risk_level_to_volatility(f.risk_level)
-        sharpe = one_year / (vol + 0.001) if vol > 0 else 0.0
+        one_year = rank_map.get(f.code)
         results.append(
             PeerComparison(
                 code=f.code,
                 name=f.name,
                 type=f.type,
                 one_year_return=one_year,
-                volatility=vol,
-                sharpe=round(sharpe, 2),
+                volatility=None,
+                sharpe=None,
                 risk_level=f.risk_level,
             )
         )
@@ -179,7 +182,7 @@ def ranking(code: str) -> ReturnRanking:
     df = _load_rank_df()  # 已过滤 NaN 和零值
     total = len(df)
     if total == 0:
-        return ReturnRanking(rank=0, total=0, percentile=0)
+        return ReturnRanking(rank=0, total=0, percentile=None)
 
     # 使用 index 快速定位（DataFrame 按近1年降序排列）
     positions = df.index[df["基金代码"] == upper].tolist()
@@ -188,21 +191,21 @@ def ranking(code: str) -> ReturnRanking:
         percentile = round(rank / total * 100)
     else:
         # 基金不在排名列表中（可能是冷门基金或数据缺失）
-        return ReturnRanking(rank=0, total=total, percentile=0)
+        return ReturnRanking(rank=0, total=total, percentile=None)
     return ReturnRanking(rank=rank, total=total, percentile=percentile)
 
 
 def portfolio() -> PortfolioOverview:
     """组合概览：由 /api/portfolio 提供真实持仓数据，此接口保留但返回空。"""
     return PortfolioOverview(
-        total_assets=0,
-        today_return=0,
-        today_return_pct=0,
-        cumulative_return=0,
-        cumulative_return_pct=0,
+        total_assets=None,
+        today_return=None,
+        today_return_pct=None,
+        cumulative_return=None,
+        cumulative_return_pct=None,
         allocation=[],
-        risk_level="暂无",
-        risk_score=0,
+        risk_level=None,
+        risk_score=None,
     )
 
 
@@ -326,15 +329,16 @@ def commentary(code: str) -> AICommentary:
     risk_warning = "；".join(risks) + "。"
 
     # ── 适合人群 ──
-    risk_score = m.risk_score
-    if risk_score >= 75:
+    # 只依据**真实推导出来的风险等级**（其唯一输入是真实年化波动率）。
+    # 绝不使用 risk_score：它没有可复现定义，已一律不可用。
+    if m.risk_level == "高":
         suitable_for = "适合风险承受能力较强、投资周期 3 年以上的积极型投资者。"
-    elif risk_score >= 50:
+    elif m.risk_level in ("中高", "中"):
         suitable_for = "适合风险承受能力中等、投资周期 1-3 年的稳健型投资者。"
-    elif risk_score >= 25:
+    elif m.risk_level in ("中低", "低"):
         suitable_for = "适合风险偏好较低、追求稳健收益的保守型投资者。"
     else:
-        suitable_for = "适合风险厌恶型投资者，可作为现金管理或短期配置工具。"
+        suitable_for = "风险指标数据不足，无法给出适合人群建议。"
 
     # ── 配置建议 ──
     if ftype == "货币型":

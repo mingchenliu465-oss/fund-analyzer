@@ -129,11 +129,17 @@ def test_analysis_api_returns_404_for_unknown_fund():
 # ---------------------------------------------------------------------------
 
 
-def nav_frame(values):
+def nav_frame(values, cumulative=None):
+    """与 _fetch_nav_history 真实输出同构的净值帧。
+
+    真实来源永远同时给出单位净值与累计净值；这里默认令累计净值 == 单位净值
+    （等价于「该基金从未分红」），需要分红场景时显式传入 cumulative。
+    """
     return pd.DataFrame(
         {
             "净值日期": pd.to_datetime([f"2026-01-{i + 1:02d}" for i in range(len(values))]),
             "单位净值": values,
+            "累计净值": list(values) if cumulative is None else cumulative,
             "日增长率": [0.0] * len(values),
         }
     )

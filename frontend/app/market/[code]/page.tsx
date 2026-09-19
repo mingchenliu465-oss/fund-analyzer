@@ -54,7 +54,6 @@ interface IndexProfile {
   category: string;
   market: string;
   publisher: string;
-  riskLevel: "中低" | "中高";
   description: string;
 }
 
@@ -65,7 +64,6 @@ const INDEX_PROFILES: Record<string, IndexProfile> = {
     category: "股票宽基指数",
     market: "上海证券交易所",
     publisher: "上交所",
-    riskLevel: "中高",
     description: "反映上海证券交易所上市股票整体表现的综合指数。",
   },
   sz399001: {
@@ -74,7 +72,6 @@ const INDEX_PROFILES: Record<string, IndexProfile> = {
     category: "股票宽基指数",
     market: "深圳证券交易所",
     publisher: "深交所",
-    riskLevel: "中高",
     description: "反映深圳证券市场代表性上市公司整体表现的成份指数。",
   },
   sh000300: {
@@ -83,7 +80,6 @@ const INDEX_PROFILES: Record<string, IndexProfile> = {
     category: "大盘宽基指数",
     market: "沪深市场",
     publisher: "中证指数",
-    riskLevel: "中高",
     description: "由沪深市场规模大、流动性好的代表性证券组成的宽基指数。",
   },
   sz399006: {
@@ -92,7 +88,6 @@ const INDEX_PROFILES: Record<string, IndexProfile> = {
     category: "成长宽基指数",
     market: "深圳证券交易所",
     publisher: "深交所",
-    riskLevel: "中高",
     description: "反映创业板市场代表性成长企业整体表现的核心指数。",
   },
   sh000905: {
@@ -101,7 +96,6 @@ const INDEX_PROFILES: Record<string, IndexProfile> = {
     category: "中盘宽基指数",
     market: "沪深市场",
     publisher: "中证指数",
-    riskLevel: "中高",
     description: "反映沪深市场中等市值上市公司整体表现的宽基指数。",
   },
   h11001: {
@@ -110,7 +104,6 @@ const INDEX_PROFILES: Record<string, IndexProfile> = {
     category: "债券宽基指数",
     market: "中国债券市场",
     publisher: "中证指数",
-    riskLevel: "中低",
     description: "反映银行间和交易所债券市场整体价格变动趋势的债券指数。",
   },
 };
@@ -198,9 +191,6 @@ export default function MarketIndexDetailPage() {
                 <span className="text-muted-foreground">
                   {profile?.category ?? "市场指数"}
                 </span>
-                <Badge variant={profile?.riskLevel === "中低" ? "positive" : "warning"}>
-                  风险 {profile?.riskLevel ?? "中高"}
-                </Badge>
               </div>
               {profile?.description && (
                 <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">

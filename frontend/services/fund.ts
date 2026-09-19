@@ -16,31 +16,38 @@ export interface FundSummary {
   name: string;
   company: string;
   type: string;
-  nav: number;
-  changePct: number;
-  oneYearReturn: number;
-  riskLevel: "低" | "中低" | "中" | "中高" | "高";
+  nav: number | null;
+  changePct: number | null;
+  oneYearReturn: number | null;
+  riskLevel: "低" | "中低" | "中" | "中高" | "高" | null;
   size: string;
-  heat: number;
+  heat: number | null;
 }
 
 export interface FundReturns {
-  daily: number;
-  weekly: number;
-  monthly: number;
-  yearly: number;
+  daily: number | null;
+  weekly: number | null;
+  monthly: number | null;
+  yearly: number | null;
 }
 
 export interface FundMetrics {
   maxDrawdown: number; // e.g. -0.182 for -18.2%
   volatility: number; // e.g. 0.164 for 16.4%
-  sharpe: number;
+  /** 收益序列方差为 0 时夏普无定义 —— 后端返回 null，不得显示成 0。 */
+  sharpe: number | null;
+  /** 只由真实年化波动率推导；波动率不可用时为 null（不按基金类型猜）。 */
   riskLevel: FundSummary["riskLevel"];
-  riskScore: number; // 0 - 100
-  alpha: number;
-  beta: number;
-  sortino: number;
-  informationRatio: number;
+  /**
+   * 综合风险评分**始终为 null**：它没有可复现的数学定义（无输入指标、
+   * 无权重、无阈值依据），后端已停止输出。绝不在前端补一个 0-100 的分数。
+   * 真实风险信息看 volatility / maxDrawdown / sharpe。
+   */
+  riskScore: number | null;
+  alpha: number | null;
+  beta: number | null;
+  sortino: number | null;
+  informationRatio: number | null;
 }
 
 export interface Sector {
@@ -67,9 +74,11 @@ export interface FundDetail extends FundSummary {
   manager: string;
   /** 基金经理从业天数；数据源未提供时为 undefined（不做任何估算或补齐）。 */
   managerDays?: number;
-  rating: number; // 1 - 5
+  rating: number | null; // 1 - 5
   topHoldings: TopHolding[];
-  investmentStyle: string;
+  investmentStyle: string | null;
+  holdingsAsOf?: string | null;
+  sectorsAsOf?: string | null;
 }
 
 export interface NavPoint {
@@ -115,9 +124,10 @@ export interface PeerComparison {
   name: string;
   type: string;
   oneYearReturn: number;
-  volatility: number;
-  sharpe: number;
-  riskLevel: string;
+  volatility: number | null;
+  sharpe: number | null;
+  /** 同类列表没有真实波动率可用于推导等级 -> null。 */
+  riskLevel: string | null;
 }
 
 export interface ReturnRanking {
@@ -127,15 +137,17 @@ export interface ReturnRanking {
 }
 
 export interface PortfolioOverview {
-  totalAssets: number;
+  totalAssets: number | null;
   /** 后端组合总览不提供日内变动时为 null —— 不填充 0，避免伪装成真实数据。 */
   todayReturn: number | null;
   todayReturnPct: number | null;
-  cumulativeReturn: number;
-  cumulativeReturnPct: number;
+  cumulativeReturn: number | null;
+  cumulativeReturnPct: number | null;
   allocation: { category: string; weight: number; color: string }[];
-  riskLevel: string;
-  riskScore: number;
+  /** 组合层无真实风险指标可用 -> null（不按仓位占比推断）。 */
+  riskLevel: string | null;
+  /** 综合风险评分始终为 null：无可复现定义。 */
+  riskScore: number | null;
 }
 
 export interface MarketStatus {
@@ -182,9 +194,9 @@ export interface HoldingCreate {
 
 export interface RealPortfolioSummary {
   total_cost: number;
-  total_value: number;
-  total_profit: number;
-  total_profit_pct: number;
+  total_value: number | null;
+  total_profit: number | null;
+  total_profit_pct: number | null;
   holding_count: number;
   holdings: HoldingItem[];
   has_stale_nav: boolean;
@@ -215,10 +227,11 @@ export interface AttributionContribution {
 }
 
 export interface AttributionSummary {
+  status?: "empty" | "complete" | "partial" | "unavailable";
   has_stale_nav: boolean;
-  total_assets: number;
-  today_return: number;
-  today_return_pct: number;
+  total_assets: number | null;
+  today_return: number | null;
+  today_return_pct: number | null;
   holding_count: number;
   gainers_count: number;
   losers_count: number;
@@ -228,9 +241,9 @@ export interface AttributionSummary {
 }
 
 export interface AttributionResult {
-  today_return: number;
-  today_return_pct: number;
-  yesterday_value: number;
+  today_return: number | null;
+  today_return_pct: number | null;
+  yesterday_value: number | null;
   summary: AttributionSummary;
   contributions: AttributionContribution[];
   top_gainer: AttributionContribution | null;
@@ -391,24 +404,23 @@ export async function getFundDetail(code: string): Promise<FundDetail> {
   return { ...detail, sectors: normalizeSectors(detail.sectors) };
 }
 
-/** Keep API inconsistencies from rendering impossible allocation percentages. */
+/**
+ * Keep API inconsistencies from rendering impossible allocation percentages.
+ *
+ * Only filtering and ordering happen here. The backend already returns the
+ * latest report period with its true disclosed weights, so this function must
+ * NOT rescale them and must NOT invent an "其他" bucket to force the sum to
+ * 100%: the shortfall is the genuinely undisclosed portion of the portfolio.
+ * Forcing it to 100% would turn "未披露" into a fabricated sector.
+ *
+ * The pie renders angle-proportionally, so a partial sum is displayed safely.
+ */
 export function normalizeSectors(sectors: Sector[] | undefined): Sector[] {
   if (!Array.isArray(sectors)) return [];
-  const valid = sectors.filter((sector) => Number.isFinite(sector.weight) && sector.weight > 0);
-  const total = valid.reduce((sum, sector) => sum + sector.weight, 0);
-  if (!total) return [];
-  const multiplier = total <= 1.05 ? 100 : 1;
-  const scale = total > 100.5 ? 100 / total : 1;
-  const normalized = valid.map((sector) => ({ ...sector, weight: Math.round(sector.weight * multiplier * scale * 100) / 100 }));
-  normalized.sort((a, b) => b.weight - a.weight);
-  const top = normalized.slice(0, 10);
-  const remainder = Math.round((100 - top.reduce((sum, sector) => sum + sector.weight, 0)) * 100) / 100;
-  if (remainder > 0.05) {
-    const other = top.find((sector) => sector.name === "其他");
-    if (other) other.weight = Math.round((other.weight + remainder) * 100) / 100;
-    else top.push({ name: "其他", weight: remainder, color: "#d1d1d6" });
-  }
-  return top;
+  return sectors
+    .filter((sector) => Number.isFinite(sector.weight) && sector.weight > 0)
+    .map((sector) => ({ ...sector }))
+    .sort((a, b) => b.weight - a.weight);
 }
 
 export async function getFundNavHistory(
@@ -559,7 +571,7 @@ function transformPortfolioToOverview(summary: RealPortfolioSummary): PortfolioO
   const allocation: PortfolioOverview["allocation"] = [];
 
   for (const [category, value] of Object.entries(typeValues)) {
-    if (value > 0 && totalValue > 0) {
+    if (value > 0 && totalValue != null && totalValue > 0) {
       allocation.push({
         category,
         weight: Math.round((value / totalValue) * 100),
@@ -569,26 +581,11 @@ function transformPortfolioToOverview(summary: RealPortfolioSummary): PortfolioO
   }
   allocation.sort((a, b) => b.weight - a.weight);
 
-  // 根据仓位推导风险等级和评分
-  let stockWeight = 0;
-  for (const [type, value] of Object.entries(typeValues)) {
-    if (type === "股票型" || type === "ETF" || type === "ETF联接") stockWeight += value;
-  }
-
-  let riskLevel: string;
-  let riskScore: number;
-
-  if (totalValue > 0) {
-    const stockRatio = stockWeight / totalValue;
-    if (stockRatio >= 0.7)      { riskLevel = "高";   riskScore = 80; }
-    else if (stockRatio >= 0.4) { riskLevel = "中高"; riskScore = 60; }
-    else if (stockRatio >= 0.2) { riskLevel = "中";   riskScore = 40; }
-    else if (stockRatio > 0)    { riskLevel = "中低"; riskScore = 20; }
-    else                         { riskLevel = "低";   riskScore = 10; }
-  } else {
-    riskLevel = "暂无";
-    riskScore = 0;
-  }
+  // 组合层没有真实风险指标（波动率 / 回撤）可用，因此**不产出**风险等级与评分。
+  // 原实现按"股票型仓位占比"查表给 80/60/40/20/10，是没有依据的人为打分，
+  // 且与基金详情页口径不一致。宁可显示"暂无"，也不编一个看起来专业的分数。
+  const riskLevel: string | null = null;
+  const riskScore: number | null = null;
 
   return {
     totalAssets: totalValue,
@@ -749,7 +746,8 @@ export async function getReturnRanking(code: string): Promise<ReturnRanking> {
  * 把"小数比率"格式化为百分比：0.9802 → "+98.02%"。
  * 只用于 ratio 语义字段（oneYearReturn / volatility / maxDrawdown / alpha / drawdown）。
  */
-export function formatPercent(value: number, digits = 2): string {
+export function formatPercent(value: number | null | undefined, digits = 2): string {
+  if (value == null || !Number.isFinite(value)) return "—";
   const sign = value > 0 ? "+" : "";
   return `${sign}${(value * 100).toFixed(digits)}%`;
 }
@@ -762,21 +760,25 @@ export function formatPercent(value: number, digits = 2): string {
  * 不要再对它们写 `* 0.01` 或 `* 100` 之类的换算 —— 单位不一致正是
  * "首页累计收益率放大 100 倍" 的根因。
  */
-export function formatPercentValue(value: number, digits = 2): string {
+export function formatPercentValue(value: number | null | undefined, digits = 2): string {
+  if (value == null || !Number.isFinite(value)) return "—";
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(digits)}%`;
 }
 
-export function formatRatio(value: number, digits = 2): string {
+export function formatRatio(value: number | null | undefined, digits = 2): string {
+  if (value == null || !Number.isFinite(value)) return "—";
   return value.toFixed(digits);
 }
 
 export function formatCurrency(value: number | null | undefined, digits = 2): string {
-  return `¥${(value ?? 0).toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
+  if (value == null || !Number.isFinite(value)) return "—";
+  return `¥${value.toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
 }
 
 export function formatAsset(value: number | null | undefined): string {
-  const v = value ?? 0;
+  if (value == null || !Number.isFinite(value)) return "—";
+  const v = value;
   if (v >= 100000000) return `${(v / 100000000).toFixed(2)}亿`;
   if (v >= 10000) return `${(v / 10000).toFixed(2)}万`;
   return v.toFixed(2);
