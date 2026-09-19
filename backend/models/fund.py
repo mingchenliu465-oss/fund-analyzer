@@ -54,6 +54,7 @@ class TopHolding(BaseModel):
     code: str | None = None
     weight: float
     change_pct: float = Field(alias="changePct")
+    asset_type: str | None = Field(default=None, alias="assetType")
 
 
 class FundDetail(FundSummary):
@@ -66,6 +67,7 @@ class FundDetail(FundSummary):
     tags: list[str]
     description: str
     manager: str
+    manager_days: int | None = Field(default=None, alias="managerDays")
     rating: int = Field(ge=1, le=5)
     top_holdings: list[TopHolding] = Field(alias="topHoldings")
     investment_style: str = Field(alias="investmentStyle")

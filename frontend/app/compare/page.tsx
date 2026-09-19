@@ -29,6 +29,24 @@ import {
 
 const COLORS = ["#0071e3", "#ff3b30", "#00a550", "#ff9500", "#af52de", "#5856d6"];
 
+// The market endpoint keeps the full history for detail-page zooming.  The
+// compare view has no range control, so keep only the latest year here.
+function keepLatestYear(points: KlinePoint[]): KlinePoint[] {
+  if (points.length === 0) return points;
+
+  const timestamp = (date: string) => {
+    const value = /^\d{4}-\d{2}$/.test(date) ? `${date}-01` : date;
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : NaN;
+  };
+  const latest = Math.max(...points.map((point) => timestamp(point.date)));
+  if (!Number.isFinite(latest)) return points;
+
+  const cutoff = new Date(latest);
+  cutoff.setFullYear(cutoff.getFullYear() - 1);
+  return points.filter((point) => timestamp(point.date) >= cutoff.getTime());
+}
+
 interface CompareFund {
   id: string;
   code: string;
@@ -71,10 +89,11 @@ export default function ComparePage() {
         getFundDetail(upper),
         getFundKlineHistory(upper, "1Y"),
       ]);
+      const recentKline = keepLatestYear(kline);
       setFunds((prev) =>
         prev.map((f) =>
           f.id === id
-            ? { ...f, detail, kline, loading: false, error: null }
+            ? { ...f, detail, kline: recentKline, loading: false, error: null }
             : f
         )
       );
@@ -99,24 +118,35 @@ export default function ComparePage() {
   const chartData = useMemo(() => {
     if (funds.length === 0 || funds.every((f) => f.kline.length === 0)) return [];
 
-    // Find the fund with the most data points
-    const maxLen = Math.max(...funds.map((f) => f.kline.length));
-    const primary = funds.find((f) => f.kline.length === maxLen) || funds[0];
+    // Build a date-indexed series for every fund.  Do not align by array index:
+    // funds often have different inception dates or missing trading days, so
+    // the i-th point in one series is not necessarily the same date as the
+    // i-th point in another series.
+    const series = funds.map((fund) => {
+      const byDate = new Map<string, number>();
+      let firstClose: number | null = null;
 
-    return primary.kline.map((point, i) => {
-      const entry: Record<string, string | number> = { date: point.date };
-      for (const fund of funds) {
-        if (fund.kline.length === 0) {
-          entry[fund.id] = 1;
-          continue;
-        }
-        if (fund.kline[i] !== undefined) {
-          // Normalize: all start at 1.0
-          const firstClose = fund.kline[0]?.close || 1;
-          entry[fund.id] = fund.kline[i].close / firstClose;
-        } else {
-          entry[fund.id] = null as unknown as number; // gap
-        }
+      for (const point of fund.kline) {
+        if (!point.date || !Number.isFinite(point.close)) continue;
+        byDate.set(point.date, point.close);
+        if (firstClose === null && point.close !== 0) firstClose = point.close;
+      }
+
+      return { fund, byDate, firstClose };
+    });
+
+    // Use the union of actual dates so newer funds start at their real
+    // inception date instead of being shifted onto the longest series.
+    const dates = Array.from(
+      new Set(series.flatMap(({ byDate }) => Array.from(byDate.keys())))
+    ).sort();
+
+    return dates.map((date) => {
+      const entry: Record<string, string | number | null> = { date };
+      for (const { fund, byDate, firstClose } of series) {
+        const close = byDate.get(date);
+        entry[fund.id] =
+          close !== undefined && firstClose !== null ? close / firstClose : null;
       }
       return entry;
     });

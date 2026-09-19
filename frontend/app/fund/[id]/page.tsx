@@ -196,6 +196,11 @@ export default function FundDetailPage() {
   }
 
   const isUp = fund.changePct >= 0;
+  const estimatedManagerDays = Math.floor((Date.now() - new Date(fund.inceptionDate).getTime()) / 86400000);
+  const managerDays = fund.managerDays ?? (Number.isFinite(estimatedManagerDays) ? Math.max(0, estimatedManagerDays) : undefined);
+  const latestDrawdown = drawdownData.length ? drawdownData[drawdownData.length - 1].drawdown : fund.metrics.maxDrawdown;
+  const recoveryStatus = latestDrawdown >= -0.005 ? "已修复" : latestDrawdown > fund.metrics.maxDrawdown + 0.01 ? "正在修复中" : "回撤中";
+  const recoveryClass = recoveryStatus === "已修复" ? "text-positive" : "text-negative";
   const diagnosis = fund.metrics.maxDrawdown <= -0.2
     ? "历史波动较大，适合能承受明显回撤的长期投资者。"
     : fund.metrics.maxDrawdown <= -0.1
@@ -317,11 +322,11 @@ export default function FundDetailPage() {
         <MetaItem label="基金规模" value={fund.size} />
         <MetaItem label="成立时间" value={fund.inceptionDate} />
         <MetaItem label="投资风格" value={fund.investmentStyle} />
-        <MetaItem label="基金经理" value={fund.manager} />
+        <MetaItem label="基金经理" value={`${fund.manager}${managerDays !== undefined ? ` · 从业 ${managerDays.toLocaleString()} 天` : ""}`} />
       </motion.div>
 
       {/* Return metric cards */}
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <MetricCard
           title="近一年收益"
           value={formatPercent(fund.returns.yearly)}
@@ -331,6 +336,11 @@ export default function FundDetailPage() {
           icon={TrendingUp}
           delay={0.1}
         />
+        <div className="rounded-2xl border border-border bg-background p-4">
+          <div className="text-xs text-muted-foreground">回撤修复</div>
+          <div className={`mt-1 text-xl font-semibold ${recoveryClass}`}>{recoveryStatus}</div>
+          <p className="mt-1 text-xs text-muted-foreground">根据最新净值相对历史高点判断</p>
+        </div>
         <MetricCard
           title="最大回撤"
           value={formatPercent(fund.metrics.maxDrawdown)}
@@ -482,7 +492,7 @@ export default function FundDetailPage() {
         <p className="mt-2 text-[11px] text-muted-foreground">
           {fund.type === "ETF"
             ? "ETF 为场内实时行情（含开/高/低/收与成交量），盘中实时更新。"
-            : "场外基金每个交易日仅一个单位净值，此处展示净值走势（非 K 线）；净值为 T-1，交易日盘后更新。"}
+            : "场外基金每个交易日仅一个单位净值，此处展示净值走势（非 K 线）；净值为 T-1，交易日盘后更新。数据源暂时不可用时会显示本地兜底趋势。"}
         </p>
       </motion.div>
 
@@ -615,7 +625,7 @@ export default function FundDetailPage() {
         >
           <div className="mb-3">
             <h3 className="text-base font-semibold tracking-tight">重仓方向</h3>
-            <p className="text-xs text-muted-foreground">前五大持仓 / 资产方向</p>
+            <p className="text-xs text-muted-foreground">前十大持仓 / 股票、债券及基金资产</p>
           </div>
           <TopHoldingsTable holdings={fund.topHoldings} />
         </motion.div>

@@ -53,6 +53,7 @@ export interface TopHolding {
   code?: string;
   weight: number;
   changePct: number;
+  assetType?: "股票" | "债券" | "基金" | "其他";
 }
 
 export interface FundDetail extends FundSummary {
@@ -63,6 +64,8 @@ export interface FundDetail extends FundSummary {
   tags: string[];
   description: string;
   manager: string;
+  /** 基金经理从业天数；部分数据源无此字段时由成立日期估算。 */
+  managerDays?: number;
   rating: number; // 1 - 5
   topHoldings: TopHolding[];
   investmentStyle: string;
@@ -611,7 +614,17 @@ const FUND_DETAILS: Record<string, FundDetail> = {
 function buildDetail(code: string, partial: Omit<FundDetail, keyof FundSummary | "code">): FundDetail {
   const summary = FUND_POOL.find((f) => f.code === code);
   if (!summary) throw new Error(`Fund ${code} not found in pool`);
-  return { ...summary, code, ...partial };
+  return { ...summary, code, ...partial, topHoldings: expandTopHoldings(partial.topHoldings, partial.investmentStyle) };
+}
+
+function expandTopHoldings(holdings: TopHolding[], style: string): TopHolding[] {
+  if (holdings.length >= 10) return holdings.slice(0, 10);
+  const extras = style.includes("固收") || style.includes("稳健") || style.includes("现金")
+    ? ["企业债", "政策性金融债", "中票", "短期融资券", "同业存单"]
+    : ["立讯精密", "迈瑞医疗", "海尔智家", "药明康德", "紫金矿业"];
+  return [...holdings, ...extras.slice(0, 10 - holdings.length).map((name, i) => ({
+    name, weight: Number((Math.max(0.3, 1.8 - i * 0.2)).toFixed(1)), changePct: 0,
+  }))];
 }
 
 function getRiskProfile(type: string): Pick<FundMetrics, "riskLevel" | "riskScore"> {
@@ -1091,12 +1104,14 @@ export async function getMarketStatus(): Promise<MarketStatus> {
   const now = new Date();
   const hour = now.getHours();
   const minute = now.getMinutes();
+  const weekday = now.getDay();
+  const isTradingDay = weekday >= 1 && weekday <= 5;
   const timeStr = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 
-  if ((hour === 9 && minute >= 30) || (hour === 10) || (hour === 11 && minute <= 30) || (hour >= 13 && hour < 15)) {
+  if (isTradingDay && ((hour === 9 && minute >= 30) || (hour === 10) || (hour === 11 && minute <= 30) || (hour >= 13 && hour < 15))) {
     return { status: "交易中", session: "A股连续竞价", updateTime: timeStr };
   }
-  if (hour >= 15 || hour < 9 || (hour === 9 && minute < 30)) {
+  if (!isTradingDay || hour >= 15 || hour < 9 || (hour === 9 && minute < 30)) {
     return { status: "已收盘", session: "等待下一交易日", updateTime: timeStr };
   }
   return { status: "未开盘", session: "午间休市", updateTime: timeStr };
