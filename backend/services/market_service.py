@@ -311,15 +311,24 @@ def _fetch_indices() -> list[MarketIndex]:
             name = str(row["name"])
             if name not in target_names:
                 continue
-            price = float(row["price"]) if pd.notna(row["price"]) else 0.0
-            change = float(row["change_pct"]) if pd.notna(row["change_pct"]) else 0.0
+            # 缺价或缺涨跌幅的指数**直接跳过**：绝不能显示成 0.00 点位或
+            # "涨 0.00%" —— 那是把"数据缺失"伪装成一个真实的市场事实。
+            # 原实现 price/change 缺失时都回退 0.0，并令 up=True（显示成上涨）。
+            price = pd.to_numeric(row["price"], errors="coerce")
+            change = pd.to_numeric(row["change_pct"], errors="coerce")
+            if pd.isna(price) or pd.isna(change):
+                logger.warning(
+                    "index %s skipped: incomplete snapshot (price=%r, change_pct=%r)",
+                    name, row["price"], row["change_pct"],
+                )
+                continue
             results.append(
                 MarketIndex(
                     code=_DEFAULT_INDEX_CODES.get(name, str(row.get("code", "")).strip()),
                     name=name,
-                    value=f"{price:,.2f}",
-                    change=round(change, 2),
-                    up=change >= 0,
+                    value=f"{float(price):,.2f}",
+                    change=round(float(change), 2),
+                    up=float(change) >= 0,
                 )
             )
         # 新浪快照不包含中证全债，使用中证官网 H11001 最近交易日补齐。
@@ -328,21 +337,26 @@ def _fetch_indices() -> list[MarketIndex]:
             if not bond_df.empty:
                 latest = bond_df.iloc[-1]
                 latest_close = float(latest["close"])
+                bond_change: float | None
                 if pd.notna(latest.get("change_pct")):
                     bond_change = float(latest["change_pct"])
                 elif len(bond_df) >= 2 and float(bond_df.iloc[-2]["close"]) != 0:
                     bond_change = (latest_close / float(bond_df.iloc[-2]["close"]) - 1) * 100
                 else:
-                    bond_change = 0.0
-                results.append(
-                    MarketIndex(
-                        code="H11001",
-                        name="中证全债",
-                        value=f"{latest_close:,.2f}",
-                        change=round(bond_change, 2),
-                        up=bond_change >= 0,
+                    # 涨跌幅算不出来时不补 0：宁可这个指数不显示，
+                    # 也不能把"算不出来"显示成"涨 0.00%"。
+                    logger.warning("bond index change unavailable; skipping H11001")
+                    bond_change = None
+                if bond_change is not None:
+                    results.append(
+                        MarketIndex(
+                            code="H11001",
+                            name="中证全债",
+                            value=f"{latest_close:,.2f}",
+                            change=round(bond_change, 2),
+                            up=bond_change >= 0,
+                        )
                     )
-                )
         except Exception as exc:
             logger.warning("bond index snapshot failed: %s", exc)
 
@@ -400,8 +414,34 @@ def indices() -> list[MarketIndex]:
 
 
 def status() -> MarketStatus:
+    """A 股市场状态。
+
+    **必须先看真实交易日历**：周末与法定节假日不是交易日。原实现只看本地
+    时间，实测周六 10:00 会返回"交易中" —— 把非交易日谎报成正在交易。
+
+    日历不可用时返回"休市"而不是猜成"交易中"：宁可说"无法确认"，也不能
+    把错误状态当成当前事实展示。
+    """
+    from services import fund_service
+
     now = datetime.now()
     current = now.time()
+    update_time = now.strftime("%H:%M:%S")
+
+    latest = fund_service.latest_trading_day()
+    if latest is None:
+        return MarketStatus(
+            status="休市",
+            session="交易日历不可用，无法确认交易时段",
+            update_time=update_time,
+        )
+    if latest != now.date():
+        # 今天是周末或法定节假日（最近已发生的交易日不是今天）。
+        return MarketStatus(
+            status="休市",
+            session="非交易日，等待下一交易日",
+            update_time=update_time,
+        )
 
     morning_start = current.replace(hour=9, minute=30, second=0)
     morning_end = current.replace(hour=11, minute=30, second=0)
@@ -424,5 +464,5 @@ def status() -> MarketStatus:
     return MarketStatus(
         status=status_str,
         session=session,
-        update_time=now.strftime("%H:%M:%S"),
+        update_time=update_time,
     )

@@ -33,7 +33,9 @@ export function FundRankings({ funds }: FundRankingsProps) {
         </thead>
         <tbody>
           {funds.map((fund, index) => {
-            const ret = fund.oneYearReturn ?? 0;
+            // 近一年收益在历史不足一年时后端返回 null。绝不能 `?? 0`：
+            // 那会把"算不出来"渲染成绿色的 "+0.00%" —— 一个看起来真实的收益数字。
+            const ret = fund.oneYearReturn;
             return (
             <tr
               key={fund.code || `fund-${index}`}
@@ -57,7 +59,11 @@ export function FundRankings({ funds }: FundRankingsProps) {
               <td className="px-3 py-2.5 text-muted-foreground">{fund.type ?? "—"}</td>
               <td
                 className={`px-3 py-2.5 text-right font-medium tabular-nums ${
-                  ret >= 0 ? "text-positive" : "text-negative"
+                  ret == null
+                    ? "text-muted-foreground"
+                    : ret >= 0
+                      ? "text-positive"
+                      : "text-negative"
                 }`}
               >
                 {formatPercent(ret)}

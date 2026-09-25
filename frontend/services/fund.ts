@@ -151,7 +151,8 @@ export interface PortfolioOverview {
 }
 
 export interface MarketStatus {
-  status: "交易中" | "已收盘" | "未开盘" | "午间休市";
+  /** "休市" 表示非交易日，或交易日历不可用（后端不猜成"交易中"）。 */
+  status: "交易中" | "已收盘" | "未开盘" | "午间休市" | "休市";
   session: string;
   updateTime: string;
 }
@@ -528,21 +529,12 @@ export async function getMarketIndices(): Promise<MarketIndex[]> {
 }
 
 export async function getMarketStatus(): Promise<MarketStatus> {
-  // 交易时段是确定的本地规则，无需为它增加一次网络往返。
-  const now = new Date();
-  const hour = now.getHours();
-  const minute = now.getMinutes();
-  const weekday = now.getDay();
-  const isTradingDay = weekday >= 1 && weekday <= 5;
-  const timeStr = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-
-  if (isTradingDay && ((hour === 9 && minute >= 30) || (hour === 10) || (hour === 11 && minute <= 30) || (hour >= 13 && hour < 15))) {
-    return { status: "交易中", session: "A股连续竞价", updateTime: timeStr };
-  }
-  if (!isTradingDay || hour >= 15 || hour < 9 || (hour === 9 && minute < 30)) {
-    return { status: "已收盘", session: "等待下一交易日", updateTime: timeStr };
-  }
-  return { status: "未开盘", session: "午间休市", updateTime: timeStr };
+  // 走后端的唯一真源，不再在前端重复实现交易时段规则。
+  // 原来那份本地实现已经漂移出两个 bug：
+  //   1) 只判断工作日，漏掉法定节假日 -> 节假日会显示"交易中"；
+  //   2) 11:31-12:59 落到最后一个分支，把"午间休市"标成"未开盘"。
+  // 后端现在用真实交易日历（tool_trade_date_hist_sina）判断，前端不再猜。
+  return fetchJson<MarketStatus>("/api/market/status", undefined, FAST_READ_TIMEOUT_MS);
 }
 
 // ── 基金类型 → 颜色映射 ──

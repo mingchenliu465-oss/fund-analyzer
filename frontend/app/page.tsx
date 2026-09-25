@@ -254,14 +254,16 @@ export default function HomePage() {
               <p className="text-xs text-muted-foreground">
                 {portfolioFailed
                   ? "数据暂时不可用"
-                  : portfolio.totalAssets > 0
-                    ? "真实持仓数据"
-                    : "暂无持仓记录"}
+                  : portfolio.totalAssets == null
+                    ? "持仓估值不完整"
+                    : portfolio.totalAssets > 0
+                      ? "真实持仓数据"
+                      : "暂无持仓记录"}
               </p>
             </div>
             <Link href="/portfolio">
               <Button variant="outline" size="sm" className="h-8 rounded-lg px-3">
-                {portfolio.totalAssets > 0 ? "查看详情" : "录入持仓"}
+                {portfolio.totalAssets != null && portfolio.totalAssets > 0 ? "查看详情" : "录入持仓"}
                 <ArrowRight className="ml-1 h-3 w-3" />
               </Button>
             </Link>
@@ -272,7 +274,7 @@ export default function HomePage() {
               <p className="text-sm font-medium">数据暂时不可用，请重新加载。</p>
               <p className="mt-1 text-xs">未使用任何替代数据</p>
             </div>
-          ) : portfolio.totalAssets > 0 ? (
+          ) : portfolio.totalAssets != null && portfolio.totalAssets > 0 ? (
               <PortfolioOverview data={portfolio} />
             ) : (
               <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">

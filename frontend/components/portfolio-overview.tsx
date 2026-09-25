@@ -12,7 +12,9 @@ interface PortfolioOverviewProps {
 export function PortfolioOverview({ data }: PortfolioOverviewProps) {
   const hasToday = data.todayReturn !== null && data.todayReturnPct !== null;
   const isTodayUp = (data.todayReturnPct ?? 0) >= 0;
-  const isCumulativeUp = data.cumulativeReturn >= 0;
+  // 累计收益在持仓估值不完整时为 null。不能只写 `>= 0`：null >= 0 为 true，
+  // 会把"算不出总资产"显示成"收益上涨"。
+  const isCumulativeUp = data.cumulativeReturn != null && data.cumulativeReturn >= 0;
 
   return (
     <div className="space-y-4">
@@ -36,9 +38,9 @@ export function PortfolioOverview({ data }: PortfolioOverviewProps) {
         <MetricCard
           title="累计收益"
           value={formatCurrency(data.cumulativeReturn)}
-          trend={isCumulativeUp ? "up" : "down"}
+          trend={data.cumulativeReturn == null ? "neutral" : isCumulativeUp ? "up" : "down"}
           trendValue={formatPercentValue(data.cumulativeReturnPct)}
-          subtitle="成立以来"
+          subtitle={data.cumulativeReturn == null ? "持仓估值不完整" : "成立以来"}
           icon={PiggyBank}
           delay={0.2}
         />

@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import bisect
 import logging
 import re
 import time
@@ -144,13 +145,17 @@ def _trade_calendar() -> list["date"]:
 
 
 def latest_trading_day(today: "date | None" = None) -> "date | None":
-    """最近一个**已发生**的有效交易日；日历不可用时返回 None（不猜）。"""
+    """最近一个**已发生**的有效交易日；日历不可用时返回 None（不猜）。
+
+    用二分查找而不是线性扫描：本函数会被**逐行**调用（基金列表 2.7 万行、
+    排行榜 2 万行），而日历有近 9000 天。线性扫描会让冷启动多花几十秒。
+    """
     days = _trade_calendar()
     if not days:
         return None
     reference = today or datetime.now().date()
-    eligible = [day for day in days if day <= reference]
-    return eligible[-1] if eligible else None
+    index = bisect.bisect_right(days, reference)
+    return days[index - 1] if index > 0 else None
 
 
 def _to_date(value: Any) -> "date | None":
@@ -170,13 +175,16 @@ def _trading_days_behind(observed: "date", today: "date | None" = None) -> int |
     """观测日之后到最近交易日之间的交易日数量（0 表示就是最近交易日）。
 
     返回 None 表示交易日历不可用、无法判定 —— 调用方不得当成 0（fresh）。
+
+    同样用二分查找：等价于统计 (observed, latest] 区间内的交易日个数。
     """
     latest = latest_trading_day(today)
     if latest is None:
         return None
     if observed >= latest:
         return 0
-    return sum(1 for day in _trade_calendar() if observed < day <= latest)
+    days = _trade_calendar()
+    return bisect.bisect_right(days, latest) - bisect.bisect_right(days, observed)
 
 
 def nav_data_status(observation: Any, today: "date | None" = None) -> str:
@@ -275,18 +283,25 @@ def _load_fund_list() -> list[FundSummary]:
             return cached
 
         try:
-            # fund_name_em 全市场列表较大（实测 16s+），默认 12s 超时会被误掐断导致
-            # 只能回退默认快照；这里单独放宽到 45s，并与排行榜丰富数据、ETF 名录
-            # 并行获取，冷启动总耗时趋近最慢的一个请求而不是三者之和。
-            # ETF 名录必须在这里预取：`_is_etf_code()` 现在依赖它，若等到下面的
-            # 逐行循环里首次调用，会在持 _FUND_LIST_LOCK 的情况下串行等一次网络。
-            with ThreadPoolExecutor(max_workers=3) as _ex:
+            # fund_name_em 全市场列表较大（实测 12-24s），默认 12s 超时会被误掐断
+            # 导致只能回退默认快照；这里单独放宽到 45s。
+            #
+            # ETF 名录**不能**和这两个大请求并发取：三者都是东方财富上游，
+            # 同时发起会互相拖慢（实测 fund_etf_fund_daily_em 单独 1.55s、
+            # 并发时 20.58s，被拖慢 13 倍），而它的超时是 30s —— 于是每次冷启动
+            # 都稳定超时（实测 3/3 在 30.04s 被掐断），并被缓存成**空名录** 600 秒。
+            # 空名录的后果是真实 ETF 被判为非 ETF：K 线返回空、类型被标成"股票型"。
+            #
+            # 实测串行与并发的总耗时几乎相同（21.5s vs 20.6s），并发没有收益，
+            # 因此把名录挪到这两个请求之后再取，不再与它们争抢上游。
+            with ThreadPoolExecutor(max_workers=2) as _ex:
                 _f_list = _ex.submit(_call_akshare, ak.fund_name_em, timeout=45)
                 _f_enrich = _ex.submit(_build_enrichment_lookup)
-                _f_registry = _ex.submit(_etf_registry)
                 df = _f_list.result()
                 enrichment = _f_enrich.result()
-                _f_registry.result()
+            # 名录在这里预取：`_is_etf_code()` 依赖它，若等到下面的逐行循环里
+            # 首次调用，会在持 _FUND_LIST_LOCK 的情况下串行等一次网络。
+            _etf_registry()
 
             df = df.drop_duplicates(subset=["基金代码"], keep="first")
 
@@ -867,6 +882,10 @@ def _metrics_from_nav(nav_df: pd.DataFrame, ftype: str) -> FundMetrics:
 # -----------------------------------------------------------------------------
 
 _HOLDINGS_CACHE_TTL = 86400  # 24 小时（季报数据不常变）
+# 抓取**失败**时只能短缓存：一次网络抖动若按 24 小时缓存空结果，会让这只基金的
+# 重仓/行业整整一天都是空的（而数据其实拿得到）。空结果本身也可能是合法稳态
+# （例如股票持仓为空的债基），所以只有异常路径用短 TTL。
+_HOLDINGS_FAILURE_TTL = 300  # 5 分钟
 _HOLDINGS_AS_OF: dict[str, str | None] = {}
 _SECTORS_AS_OF: dict[str, str | None] = {}
 
@@ -970,7 +989,7 @@ def _fetch_real_holdings(code: str) -> list[TopHolding] | None:
         return holdings if holdings else None
     except Exception as exc:
         logger.warning("Real holdings fetch failed for %s: %s", code, exc)
-        _set_cache(cache_key, [], _HOLDINGS_CACHE_TTL)
+        _set_cache(cache_key, [], _HOLDINGS_FAILURE_TTL)
         return None
 
 
@@ -1071,7 +1090,7 @@ def _fetch_real_sectors(code: str) -> list[Sector] | None:
         return sectors if sectors else None
     except Exception as exc:
         logger.warning("Real sectors fetch failed for %s: %s", code, exc)
-        _set_cache(cache_key, [], _HOLDINGS_CACHE_TTL)
+        _set_cache(cache_key, [], _HOLDINGS_FAILURE_TTL)
         return None
 
 

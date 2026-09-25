@@ -241,21 +241,31 @@ def hold_structure() -> HoldStructure:
             elif "总份额" in col or "份额" in col:
                 col_map["shares"] = col
 
-        if len(col_map) < 6:
-            logger.warning("hold_structure: column mapping incomplete, found: %s", list(col_map.keys()))
-
-        for _, row in df.iterrows():
-            try:
-                points.append(HoldStructurePoint(
-                    date=str(row.get(col_map.get("date", ""), ""))[:10],
-                    fund_count=int(row.get(col_map.get("funds", ""), 0) or 0),
-                    institution_pct=float(row.get(col_map.get("inst", ""), 0) or 0),
-                    individual_pct=float(row.get(col_map.get("indv", ""), 0) or 0),
-                    internal_pct=float(row.get(col_map.get("intl", ""), 0) or 0),
-                    total_shares=float(row.get(col_map.get("shares", ""), 0) or 0),
-                ))
-            except (ValueError, TypeError):
-                continue
+        # 必须六个字段全部映射成功才产出数据点。
+        # 原实现在列名没匹配全时只打一条 warning，然后继续用 col_map.get(k, "")
+        # 去取值 —— 取不到就回退 0（`float(... or 0)`），于是"取不到机构持有比例"
+        # 被显示成"机构持有 0%"，一个看起来真实但完全错误的持仓结构。
+        required_keys = ("date", "funds", "inst", "indv", "intl", "shares")
+        missing_keys = [key for key in required_keys if key not in col_map]
+        if missing_keys:
+            logger.warning(
+                "hold_structure: column mapping incomplete (missing %s, found %s); "
+                "refusing to emit zero-filled points",
+                missing_keys, list(col_map.keys()),
+            )
+        else:
+            for _, row in df.iterrows():
+                try:
+                    points.append(HoldStructurePoint(
+                        date=str(row.get(col_map["date"], ""))[:10],
+                        fund_count=int(row.get(col_map["funds"], 0) or 0),
+                        institution_pct=float(row.get(col_map["inst"], 0) or 0),
+                        individual_pct=float(row.get(col_map["indv"], 0) or 0),
+                        internal_pct=float(row.get(col_map["intl"], 0) or 0),
+                        total_shares=float(row.get(col_map["shares"], 0) or 0),
+                    ))
+                except (ValueError, TypeError):
+                    continue
     except Exception as exc:
         logger.warning("hold_structure fetch failed: %s", exc)
 
@@ -293,22 +303,33 @@ def commentary(code: str) -> AICommentary:
     ftype = fund.type
     ret_1y = fund.one_year_return
     m = fund.metrics
-    ret_str = f"{ret_1y * 100:+.2f}%"
     dd_str = f"{m.max_drawdown * 100:.1f}%"
     vol_str = f"{m.volatility * 100:.1f}%"
-    sharpe_str = f"{m.sharpe:.2f}"
+    # 收益序列方差为 0 时夏普无定义（后端返回 None）。不得格式化成 "0.00"，
+    # 也不得直接 f-string 格式化（会对 None 抛 TypeError）。
+    sharpe_str = f"{m.sharpe:.2f}" if m.sharpe is not None else None
 
     # ── 收益描述 ──
-    if ret_1y > 0.20:
-        perf = f"{name} 近一年收益率 {ret_str}，表现优异，显著跑赢同类平均。"
-    elif ret_1y > 0.05:
-        perf = f"{name} 近一年收益率 {ret_str}，处于同类中等水平。"
-    elif ret_1y > 0:
-        perf = f"{name} 近一年收益率 {ret_str}，收益偏保守。"
-    elif ret_1y > -0.10:
-        perf = f"{name} 近一年收益率 {ret_str}，短期承压，需关注后续表现。"
+    # 近一年收益需要 >= 365 天历史。成立不足一年、或已终止的基金没有这个数，
+    # 必须如实说明"数据不足"：既不能用 0 顶替，也不能因缺失而崩溃。
+    if ret_1y is None:
+        perf = f"{name} 历史数据不足一年，暂无可用的近一年收益率。"
     else:
-        perf = f"{name} 近一年收益率 {ret_str}，跌幅较大，建议审慎评估。"
+        ret_str = f"{ret_1y * 100:+.2f}%"
+        # 只陈述**真实算出来的近一年收益率**本身。
+        # 原文案里的"显著跑赢同类平均"/"处于同类中等水平"断言了一个同业基准，
+        # 但本函数只调用过 get_by_code()，从未取过任何同类数据 —— 那是编造比较。
+        # 需要真实同业对比请走 /api/analysis/peers（那里的对比基于真实榜单）。
+        if ret_1y > 0.20:
+            perf = f"{name} 近一年收益率 {ret_str}，涨幅明显。"
+        elif ret_1y > 0.05:
+            perf = f"{name} 近一年收益率 {ret_str}，录得正收益。"
+        elif ret_1y > 0:
+            perf = f"{name} 近一年收益率 {ret_str}，收益偏保守。"
+        elif ret_1y > -0.10:
+            perf = f"{name} 近一年收益率 {ret_str}，短期承压，需关注后续表现。"
+        else:
+            perf = f"{name} 近一年收益率 {ret_str}，跌幅较大，建议审慎评估。"
 
     # ── 风险描述 ──
     risks = []
@@ -345,7 +366,10 @@ def commentary(code: str) -> AICommentary:
         suggestion = "建议作为组合流动性缓冲，保留 3-6 个月生活费的仓位。"
     elif ftype == "债券型":
         suggestion = "适合作为组合底仓（建议占 30%-50%），与权益基金搭配可降低整体波动。"
-    elif sharpe_str and m.sharpe > 0.5:
+    elif m.sharpe is None:
+        # 夏普无定义时不得套用"风险收益比较低"的判断 —— 那是算不出来的结论。
+        suggestion = "夏普比率无定义（收益序列方差为 0），无法给出风险调整后收益建议。"
+    elif m.sharpe > 0.5:
         suggestion = f"Sharpe 比率 {sharpe_str}，风险调整后收益尚可。建议通过定投方式参与，避免单笔重仓。"
     elif m.sharpe > 0:
         suggestion = f"Sharpe 比率 {sharpe_str}，风险调整后收益偏低。建议控制仓位在组合的 10%-20%。"

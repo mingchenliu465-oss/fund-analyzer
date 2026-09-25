@@ -124,21 +124,35 @@ export default function FundListPage() {
                   </td>
                   <td
                     className={`px-3 py-3 text-right font-medium tabular-nums ${
-                      fund.changePct >= 0 ? "text-positive" : "text-negative"
+                      fund.changePct == null
+                        ? "text-muted-foreground"
+                        : fund.changePct >= 0
+                          ? "text-positive"
+                          : "text-negative"
                     }`}
                   >
-                    <span className="inline-flex items-center gap-1">
-                      {fund.changePct >= 0 ? (
-                        <TrendingUp className="h-3 w-3" />
-                      ) : (
-                        <TrendingDown className="h-3 w-3" />
-                      )}
-                      {formatPercent(fund.changePct * 0.01)}
-                    </span>
+                    {/* 涨跌幅缺失时后端返回 null。不能只写 `>= 0`：null >= 0 为 true，
+                        会显示成上涨箭头 + 绿色 "+0.00%"。 */}
+                    {fund.changePct == null ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1">
+                        {fund.changePct >= 0 ? (
+                          <TrendingUp className="h-3 w-3" />
+                        ) : (
+                          <TrendingDown className="h-3 w-3" />
+                        )}
+                        {formatPercent(fund.changePct * 0.01)}
+                      </span>
+                    )}
                   </td>
                   <td
                     className={`px-3 py-3 text-right font-medium tabular-nums ${
-                      fund.oneYearReturn >= 0 ? "text-positive" : "text-negative"
+                      fund.oneYearReturn == null
+                        ? "text-muted-foreground"
+                        : fund.oneYearReturn >= 0
+                          ? "text-positive"
+                          : "text-negative"
                     }`}
                   >
                     {formatPercent(fund.oneYearReturn)}
@@ -189,7 +203,11 @@ export default function FundListPage() {
   );
 }
 
-function HeatBadge({ heat }: { heat: number }) {
+function HeatBadge({ heat }: { heat: number | null }) {
+  // 后端目前从不提供 heat（恒为 null）。原实现直接 `heat >= 80`，
+  // null 会一路落到最后一个分支，把**每只基金**都标成"一般 N" —— 一个
+  // 从未计算过的活跃度标签。没有数据就显示"—"。
+  if (heat == null) return <span className="text-muted-foreground">—</span>;
   if (heat >= 80) return <Badge variant="negative">高热 {heat}</Badge>;
   if (heat >= 50) return <Badge variant="warning">活跃 {heat}</Badge>;
   return <Badge variant="outline">一般 {heat}</Badge>;

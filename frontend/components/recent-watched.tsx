@@ -22,7 +22,9 @@ export function RecentWatched({ funds }: RecentWatchedProps) {
   return (
     <div className="space-y-3">
       {funds.map((fund) => {
-        const chg = fund.changePct ?? 0;
+        // 涨跌幅缺失时后端返回 null。`?? 0` 会渲染成"上涨箭头 + +0.00%"，
+        // 把"拿不到行情"伪装成一个真实的持平报价。
+        const chg = fund.changePct;
         return (
         <Link
           key={fund.code}
@@ -41,15 +43,19 @@ export function RecentWatched({ funds }: RecentWatchedProps) {
             <div className="text-sm font-medium tabular-nums">{formatCurrency(fund.nav, 4)}</div>
             <div
               className={`inline-flex items-center gap-0.5 text-xs font-medium tabular-nums ${
-                chg >= 0 ? "text-positive" : "text-negative"
+                chg == null
+                  ? "text-muted-foreground"
+                  : chg >= 0
+                    ? "text-positive"
+                    : "text-negative"
               }`}
             >
-              {chg >= 0 ? (
+              {chg == null ? null : chg >= 0 ? (
                 <TrendingUp className="h-3 w-3" />
               ) : (
                 <TrendingDown className="h-3 w-3" />
               )}
-              {formatPercent(chg * 0.01)}
+              {chg == null ? "—" : formatPercent(chg * 0.01)}
             </div>
           </div>
         </Link>

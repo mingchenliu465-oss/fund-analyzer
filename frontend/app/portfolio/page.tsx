@@ -591,22 +591,34 @@ export default function PortfolioPage() {
                   <div className="text-xs text-muted-foreground">今日收益</div>
                   <div
                     className={`text-2xl font-semibold tabular-nums ${
-                      attribution.today_return >= 0 ? "text-positive" : "text-negative"
+                      attribution.today_return == null
+                        ? "text-muted-foreground"
+                        : attribution.today_return >= 0
+                          ? "text-positive"
+                          : "text-negative"
                     }`}
                   >
-                    {attribution.today_return >= 0 ? "+" : ""}¥
-                    {attribution.today_return.toLocaleString()}
+                    {/* 有贡献行时后端一定给出数字，但类型上是 nullable：
+                        这里显式判空，避免将来上游改动时 null.toLocaleString() 崩页。 */}
+                    {attribution.today_return == null
+                      ? "—"
+                      : `${attribution.today_return >= 0 ? "+" : ""}¥${attribution.today_return.toLocaleString()}`}
                   </div>
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">今日收益率</div>
                   <div
                     className={`text-2xl font-semibold tabular-nums ${
-                      attribution.today_return_pct >= 0 ? "text-positive" : "text-negative"
+                      attribution.today_return_pct == null
+                        ? "text-muted-foreground"
+                        : attribution.today_return_pct >= 0
+                          ? "text-positive"
+                          : "text-negative"
                     }`}
                   >
-                    {attribution.today_return_pct >= 0 ? "+" : ""}
-                    {attribution.today_return_pct.toFixed(2)}%
+                    {attribution.today_return_pct == null
+                      ? "—"
+                      : `${attribution.today_return_pct >= 0 ? "+" : ""}${attribution.today_return_pct.toFixed(2)}%`}
                   </div>
                 </div>
                 <div className="ml-auto max-w-[200px] text-right text-[11px] text-muted-foreground">

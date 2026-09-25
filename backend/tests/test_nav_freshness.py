@@ -211,7 +211,8 @@ def test_case_f_expired_nav_is_excluded_from_current_valuation(calendar):
 
 
 def test_case_f_fresh_nav_is_used_for_current_valuation(calendar):
-    with patch.object(portfolio_service, "_get_holding_nav", return_value=(1.25, FRIDAY.isoformat())):
+    with patch.object(portfolio_service, "_get_holding_nav", return_value=(1.25, FRIDAY.isoformat())), \
+         patch.object(fund_service, "latest_trading_day", return_value=FRIDAY):
         nav, nav_date, stale = portfolio_service._getportfolio_nav_fallback("000001")
 
     assert nav == 1.25

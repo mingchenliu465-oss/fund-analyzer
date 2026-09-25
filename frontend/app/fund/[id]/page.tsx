@@ -195,8 +195,13 @@ export default function FundDetailPage() {
     );
   }
 
-  const isUp = fund.changePct >= 0;
+  // 涨跌幅缺失时后端返回 null。绝不能只写 `>= 0`：null >= 0 在 JS 里为 true，
+  // 会渲染成"上涨箭头 + 绿色 +0.00%"，把"拿不到行情"伪装成真实的持平报价。
+  const changePct = fund.changePct;
+  const hasChange = changePct != null;
+  const isUp = hasChange && changePct >= 0;
   // 数据源未提供基金经理任职天数时不显示，绝不用成立日期估算。
+  // 注意：后端返回的是 **null**（字段存在、值为 null），不是 undefined。
   const managerDays = fund.managerDays;
   const latestDrawdown = drawdownData.length ? drawdownData[drawdownData.length - 1].drawdown : fund.metrics.maxDrawdown;
   const recoveryStatus = latestDrawdown >= -0.005 ? "已修复" : latestDrawdown > fund.metrics.maxDrawdown + 0.01 ? "正在修复中" : "回撤中";
@@ -212,7 +217,7 @@ export default function FundDetailPage() {
       <section className="mb-6 rounded-2xl border border-accent/20 bg-accent/5 p-5 sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div><div className="flex items-center gap-2 text-sm font-semibold"><Zap className="h-4 w-4 text-accent" />基金诊断</div><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{diagnosis}</p></div>
-          <div className="grid grid-cols-2 gap-3 text-sm sm:min-w-[250px]"><div className="rounded-xl border border-border bg-background/70 p-3"><span className="block text-xs text-muted-foreground">近一年收益</span><strong className={fund.oneYearReturn >= 0 ? "mt-1 block text-positive" : "mt-1 block text-negative"}>{formatPercent(fund.oneYearReturn)}</strong></div><div className="rounded-xl border border-border bg-background/70 p-3"><span className="block text-xs text-muted-foreground">最大回撤</span><strong className="mt-1 block text-negative">{formatPercent(fund.metrics.maxDrawdown)}</strong></div></div>
+          <div className="grid grid-cols-2 gap-3 text-sm sm:min-w-[250px]"><div className="rounded-xl border border-border bg-background/70 p-3"><span className="block text-xs text-muted-foreground">近一年收益</span><strong className={fund.oneYearReturn == null ? "mt-1 block text-muted-foreground" : fund.oneYearReturn >= 0 ? "mt-1 block text-positive" : "mt-1 block text-negative"}>{formatPercent(fund.oneYearReturn)}</strong></div><div className="rounded-xl border border-border bg-background/70 p-3"><span className="block text-xs text-muted-foreground">最大回撤</span><strong className="mt-1 block text-negative">{formatPercent(fund.metrics.maxDrawdown)}</strong></div></div>
         </div>
         <p className="mt-4 border-t border-accent/10 pt-3 text-xs text-muted-foreground">根据历史数据生成，仅帮助理解，不构成买卖建议。</p>
       </section>
@@ -265,11 +270,19 @@ export default function FundDetailPage() {
                 <div className="text-xs text-muted-foreground">日涨跌幅</div>
                 <div
                   className={`flex items-center justify-end gap-1 text-2xl font-semibold tabular-nums ${
-                    isUp ? "text-positive" : "text-negative"
+                    !hasChange
+                      ? "text-muted-foreground"
+                      : isUp
+                        ? "text-positive"
+                        : "text-negative"
                   }`}
                 >
-                  {isUp ? <TrendingUp className="h-5 w-5" /> : <TrendingDown className="h-5 w-5" />}
-                  {formatPercent(fund.changePct * 0.01)}
+                  {!hasChange ? null : isUp ? (
+                    <TrendingUp className="h-5 w-5" />
+                  ) : (
+                    <TrendingDown className="h-5 w-5" />
+                  )}
+                  {hasChange ? formatPercent(changePct * 0.01) : "—"}
                 </div>
               </div>
             </div>
@@ -321,8 +334,18 @@ export default function FundDetailPage() {
       >
         <MetaItem label="基金规模" value={fund.size} />
         <MetaItem label="成立时间" value={fund.inceptionDate} />
-        <MetaItem label="投资风格" value={fund.investmentStyle} />
-        <MetaItem label="基金经理" value={`${fund.manager}${managerDays !== undefined ? ` · 从业 ${managerDays.toLocaleString()} 天` : ""}`} />
+        {/* 投资风格当前一律为 null（无真实持仓风格数据）-> 显示"—"，不猜。 */}
+        <MetaItem label="投资风格" value={fund.investmentStyle ?? "—"} />
+        <MetaItem
+          label="基金经理"
+          value={
+            // 原代码写的是 `managerDays !== undefined`，而后端给的是 null ——
+            // 于是 null 走进 toLocaleString() 分支，整个页面渲染中断（Runtime Error）。
+            typeof managerDays === "number"
+              ? `${fund.manager} · 从业 ${managerDays.toLocaleString()} 天`
+              : fund.manager
+          }
+        />
       </motion.div>
 
       {/* Return metric cards */}
@@ -330,8 +353,10 @@ export default function FundDetailPage() {
         <MetricCard
           title="近一年收益"
           value={formatPercent(fund.returns.yearly)}
-          trend={fund.returns.yearly >= 0 ? "up" : "down"}
-          trendValue={fund.returns.yearly >= 0 ? "跑赢基准" : "短期承压"}
+          // 历史不足一年时 yearly 为 null。绝不能 `>= 0`：null >= 0 为 true，
+          // 会显示成上涨，并标注"跑赢基准"—— 一个从未计算过的基准比较。
+          trend={fund.returns.yearly == null ? "neutral" : fund.returns.yearly >= 0 ? "up" : "down"}
+          trendValue={fund.returns.yearly == null ? "历史不足一年" : fund.returns.yearly >= 0 ? undefined : "近一年为负"}
           subtitle="近12个月"
           icon={TrendingUp}
           delay={0.1}
