@@ -1,123 +1,186 @@
-# Fund Analyzer
+# 智投 · AI 基金投资分析助手
 
-基金分析助手：Next.js 前端 + FastAPI 后端，接入 akshare 国内基金实时/历史数据。
+一个面向个人投资者的本地基金研究工具。
 
-## 项目结构
+它把基金净值、风险、回撤、持仓、市场行情和个人组合放在一个界面里，帮助你回答三个实际问题：
 
-```
-fund-analyzer/
-├── frontend/          # Next.js 前端
-│   ├── app/           # 页面路由
-│   ├── components/    # 可复用组件
-│   └── services/fund.ts   # 数据服务层（只调用真实后端 API，无 mock）
-├── backend/           # FastAPI 后端
-│   ├── api/           # REST 路由
-│   ├── models/        # Pydantic 模型
-│   ├── services/      # 数据获取与业务逻辑
-│   └── main.py        # 服务入口
-└── components/        # 共享组件（预留）
-```
+> 这只基金过去表现怎么样？
+>
+> 我的组合今天为什么涨跌？
+>
+> 我看到的数据到底新不新鲜？
+
+项目运行在本地，数据来自公开接口，不需要把持仓记录上传到第三方服务。
+
+![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi)
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python)
+![Data](https://img.shields.io/badge/data-akshare-blue)
+
+## 你可以用它做什么
+
+### 看懂一只基金
+
+- 搜索基金名称或代码
+- 查看净值、收益、年化波动率、夏普比率和最大回撤
+- 区分场外基金、场内 ETF 和 LOF 的行情语义
+- 查看净值走势、ETF K 线、行业分布和前十大持仓
+- 查看同类比较与收益排名（数据可用时显示）
+
+### 管理自己的组合
+
+- 录入买入日期、金额、净值、份额和手续费
+- 支持单笔持仓和自动定投记录
+- 查看持仓市值、成本、浮动盈亏和历史资产走势
+- 解释“今天我的组合为什么涨跌”
+- 按基金贡献拆分上涨来源和拖累来源
+- 行情过期或缺失时明确提示，不把缺失数据伪装成 0
+
+### 从多个角度复盘
+
+- 组合洞察：收益解释、集中度、指数对比和历史变化
+- 投资复盘：按当前持仓生成规则化的复盘内容
+- 基金对比：把多只基金放在一起查看关键指标
+- Workbench：快速搜索、标记和观察基金走势
+
+## 页面导航
+
+| 页面 | 地址 | 用途 |
+|---|---|---|
+| 首页 | `/` | 市场状态、热门基金和最近浏览 |
+| 基金分析 | `/fund` | 搜索基金并进入详情 |
+| 基金详情 | `/fund/{基金代码}` | 业绩、风险、走势、持仓和行业 |
+| 我的组合 | `/portfolio` | 录入交易、查看持仓和今日收益 |
+| 组合洞察 | `/insights` | 收益、风险、集中度和市场比较 |
+| 基金对比 | `/compare` | 多只基金横向比较 |
+| 投资复盘 | `/review` | 查看组合复盘结果 |
+| Workbench | `/workbench` | 快速研究基金 |
+
+## 真实数据优先
+
+这个项目有一条明确的数据原则：**没有数据就明确显示没有数据。**
+
+- 不使用 mock 基金行情或虚构收益
+- 不用 `0` 替代缺失的净值、涨跌幅或风险指标
+- 基金净值、ETF 市价和 ETF 净值分开处理
+- 收益、波动率和最大回撤优先使用累计净值口径，避免把分红误算成亏损
+- 持仓和行业配置锁定在同一个报告期，避免跨季度混算
+- 每条行情都尽量保留观测日期，并区分 `fresh`、`stale`、`unavailable` 等状态
+
+数据源来自 [akshare](https://www.akshare.xyz/)，底层接口主要覆盖东方财富、天天基金和新浪公开数据。公开数据可能受到网络、接口限流或反爬策略影响，遇到暂不可用时请稍后重试。
 
 ## 快速开始
 
-### 1. 安装后端依赖
+### 环境要求
 
-```bash
-cd backend
-python -m pip install -r requirements.txt
+- Python 3.11 或更高版本
+- Node.js 20 或更高版本
+- 能访问 akshare 所使用的公开数据接口
+
+### 1. 安装后端
+
+在项目根目录执行：
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r backend/requirements.txt
 ```
 
 ### 2. 启动后端
 
-```bash
+```powershell
 cd backend
-python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+..\.venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-后端默认监听 `http://localhost:8000`，API 前缀为 `/api`。健康检查：`GET http://localhost:8000/health`。
+后端地址：`http://localhost:8000`<br>
+健康检查：`http://localhost:8000/health`<br>
+API 前缀：`/api`
 
-### 3. 启动前端
+### 3. 安装并启动前端
 
-```bash
+另开一个终端：
+
+```powershell
 cd frontend
+npm install
 npm run dev
 ```
 
-前端默认地址 `http://localhost:3000`。`next.config.ts` 已将 `/api/*` rewrite 到 `http://localhost:8000/api/*`。
+前端地址：`http://localhost:3000`
 
-前端**没有 mock / 演示模式**：所有数据都必须来自后端真实接口。取不到数据时页面显示"数据暂时不可用"或"暂无数据"，不会展示任何模拟或补齐的数值。
+前端通过 `next.config.ts` 将 `/api/*` 转发到本地 FastAPI 后端。项目已移除桌面快捷启动器，使用上述两个终端命令即可启动。
 
-## 数据源
+### 4. 生产构建（可选）
 
-后端使用 [akshare](https://www.akshare.xyz/) 获取国内公开基金数据，主要包括：
-
-- `fund_name_em`：基金名称与类型列表
-- `fund_individual_basic_info_xq`：基金基本信息（成立时间、规模、基金经理等）
-- `fund_open_fund_info_em`：场外基金历史净值
-- `fund_etf_hist_em`：场内 ETF 历史行情
-- `fund_open_fund_rank_em` / `fund_exchange_rank_em`：开放式基金与 ETF 收益排名
-- `stock_zh_index_spot_sina`：A 股主要指数行情
-
-## 环境变量
-
-| 变量 | 说明 | 默认值 |
-|---|---|---|
-| `NEXT_PUBLIC_API_URL` | 前端 API 基础地址 | `""`（使用 Next.js rewrite） |
+```powershell
+cd frontend
+npm run build
+npm run start
+```
 
 ## 主要 API
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/funds?q={query}&limit={limit}` | 基金列表 / 搜索 |
+| GET | `/api/funds?q={query}&limit={limit}` | 基金搜索与列表 |
 | GET | `/api/funds/rankings?limit={limit}` | 近一年收益排行 |
 | GET | `/api/funds/popular?limit={limit}` | 热门基金 |
 | GET | `/api/funds/{code}` | 基金详情 |
-| GET | `/api/funds/{code}/nav-history?period={1M\|3M\|6M\|1Y\|3Y}` | 净值历史 |
-| GET | `/api/market/kline?code={code}&period={1M\|3M\|6M\|1Y\|3Y}` | K 线数据 |
+| GET | `/api/funds/{code}/nav-history?period=...` | 基金净值历史 |
+| GET | `/api/market/kline?code={code}&period=...` | 基金或 ETF 行情 |
 | GET | `/api/market/indices` | 市场指数 |
-| GET | `/api/market/status` | 市场状态 |
+| GET | `/api/market/status` | 当前交易日状态 |
 | GET | `/api/analysis/drawdown/{code}?period=...` | 历史回撤 |
-| GET | `/api/analysis/peers/{code}` | 同类基金对比 |
+| GET | `/api/analysis/peers/{code}` | 同类比较 |
 | GET | `/api/analysis/ranking/{code}` | 收益排名 |
-| GET | `/api/analysis/portfolio` | 组合概览 |
-| GET | `/api/portfolio/insights?period=1W\|1M\|3M\|1Y\|ALL` | 组合洞察（收益解释、集中度、指数对比、历史变化） |
-| GET | `/api/analysis/flow/{code}` | 资金流向（模拟） |
-| GET | `/api/analysis/ai/{code}` | AI 解读（模拟） |
+| GET | `/api/portfolio` | 组合概览 |
+| GET | `/api/portfolio/attribution` | 今日收益归因 |
+| GET | `/api/portfolio/insights?period=...` | 组合洞察 |
+| GET | `/api/review/daily` | 投资复盘 |
 
-## 缓存策略
+启动后也可以打开 FastAPI 文档：`http://localhost:8000/docs`。
 
-后端对基金列表、排名、净值历史等数据使用内存 TTL 缓存（默认 5 分钟，列表 30 分钟），降低对 akshare/东方财富接口的调用频率。
+## 数据与本地文件
 
-## 注意事项
+- 默认持仓数据库：`backend/database/portfolio.db`
+- 可通过 `FUND_ANALYZER_DB_PATH` 指定其他 SQLite 文件
+- `backend/database/*.db`、日志和测试缓存不会提交到 Git
+- 最近浏览记录保存在浏览器本地，不上传到服务器
 
-- 基金净值通常为 T-1 或收盘后更新，"实时"主要指行情/估值类数据。
-- akshare 依赖东方财富、天天基金等公开接口，可能因网络、反爬策略波动。**数据源失败时后端返回空结果或明确错误，前端显示"数据暂时不可用"，绝不使用任何替代、估算或模拟数据。**
-- 首次加载基金全量列表可能需要 10-20 秒，后续请求从缓存读取会快很多。
+## 开发与验证
 
-
-## Phase 2 验收
-
-从仓库根目录安装开发依赖并运行后端完整测试：
+后端测试需要使用仓库内虚拟环境：
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -r backend/requirements-dev.txt
-.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m pytest -q --basetemp=.tmp-pytest-base
 ```
 
-前端检查在 `frontend` 目录运行：
+前端检查：
 
 ```powershell
+cd frontend
 npm.cmd run lint
-npx.cmd tsc --noEmit
+npm.cmd exec tsc -- --noEmit
 npm.cmd run build
 ```
 
-pytest 自动使用临时 SQLite 数据库，不使用本地持仓库。运行服务时可用
-`FUND_ANALYZER_DB_PATH` 指定数据库文件，默认仍为 `backend/database/portfolio.db`。
-数据库、SQLite WAL/SHM、日志与测试缓存不纳入 Git。
+当前版本已通过完整后端测试、TypeScript 检查、ESLint 和 Next.js 生产构建。
 
-收益归因按当前持有份额和最近两次可用净值计算，按基金代码合并多笔持仓，
-组合收益等于展示的各基金贡献之和。行情缺失时保留估值并标记待更新，收益
-汇总只含可用行情。复盘配置比例使用持仓市值，不能用当日收益计算。
-此口径未覆盖日内买卖现金流、已卖出持仓和分红，因此不是完整账户收益核算。
-场外基金与 ETF 的数据日期可能不同，外部行情实时性需要单独在线验收。
+## 重要说明
+
+- 场外基金净值通常是 T-1，ETF 行情可能是交易日收盘数据；页面会显示数据状态，不把它们混称为同一种“实时价格”。
+- 首次加载基金全量列表可能需要一段时间，后续请求会使用内存缓存。
+- 组合今日收益按当前持有份额和最近两次可用净值计算，日内现金流、分红和已卖出持仓不等同于完整券商账户收益。
+- 所有分析仅用于理解历史数据，不构成投资建议。
+
+## 技术栈
+
+- 前端：Next.js 16、React 19、TypeScript、Tailwind CSS、React Query、Recharts、Lightweight Charts
+- 后端：FastAPI、Pydantic、Pandas、NumPy、SQLite
+- 数据：akshare
+
+## License
+
+本项目目前主要用于个人学习和本地研究。使用公开数据时请遵守相关数据源的服务条款。
