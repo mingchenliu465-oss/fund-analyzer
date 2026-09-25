@@ -586,6 +586,35 @@ export default function PortfolioPage() {
 
           {attribution && attribution.contributions.length > 0 ? (
             <>
+              <div className="mb-4 grid gap-2 sm:grid-cols-3">
+                <div className="rounded-xl border border-border bg-muted/20 px-3 py-2">
+                  <div className="text-[11px] text-muted-foreground">行情状态</div>
+                  <div className="mt-1 text-sm font-medium">
+                    {attribution.summary.status === "partial"
+                      ? "部分可用"
+                      : attribution.summary.status === "complete"
+                        ? "完整"
+                        : "待确认"}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-border bg-muted/20 px-3 py-2">
+                  <div className="text-[11px] text-muted-foreground">上涨 / 下跌</div>
+                  <div className="mt-1 text-sm font-medium tabular-nums">
+                    <span className="text-positive">{attribution.summary.gainers_count} 只上涨</span>
+                    <span className="mx-1 text-muted-foreground">·</span>
+                    <span className="text-negative">{attribution.summary.losers_count} 只下跌</span>
+                  </div>
+                </div>
+                <div className="rounded-xl border border-border bg-muted/20 px-3 py-2">
+                  <div className="text-[11px] text-muted-foreground">影响最大</div>
+                  <div className="mt-1 truncate text-sm font-medium">
+                    {attribution.summary.today_return != null && attribution.summary.today_return >= 0
+                      ? attribution.summary.top_gainer_name ?? "暂无"
+                      : attribution.summary.top_loser_name ?? "暂无"}
+                  </div>
+                </div>
+              </div>
+
               <div className="mb-4 flex flex-wrap items-center gap-4 rounded-xl border border-border bg-muted/30 p-4">
                 <div>
                   <div className="text-xs text-muted-foreground">今日收益</div>
@@ -621,7 +650,7 @@ export default function PortfolioPage() {
                       : `${attribution.today_return_pct >= 0 ? "+" : ""}${attribution.today_return_pct.toFixed(2)}%`}
                   </div>
                 </div>
-                <div className="ml-auto max-w-[200px] text-right text-[11px] text-muted-foreground">
+                <div className="ml-auto max-w-[240px] text-right text-[11px] text-muted-foreground">
                   {attribution.summary.note}
                   {attribution.summary.has_stale_nav && <div>部分行情待更新，收益仅含可用行情</div>}
                 </div>
@@ -658,7 +687,7 @@ export default function PortfolioPage() {
                       >
                         {c.nav_stale ? "待更新" : `${c.contribution >= 0 ? "+" : ""}¥${c.contribution.toLocaleString()}`}
                         <div className="text-xs font-normal text-muted-foreground">
-                          占比 {Math.abs(c.contribution_rate * 100).toFixed(1)}%
+                          对今日波动占比 {Math.abs(c.contribution_rate * 100).toFixed(1)}%
                         </div>
                       </div>
                     </div>
