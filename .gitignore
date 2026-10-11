@@ -27,6 +27,7 @@ backend/.env
 
 # Local runtime state
 .venv/
+.tmp-pytest-*/
 *.log
 backend/database/*.db
 backend/database/*.db-wal
