@@ -17,6 +17,10 @@ export interface FundSummary {
   company: string;
   type: string;
   nav: number | null;
+  /** nav 的真实观测日（净值日期/行情日期）；无则为 null。 */
+  navDate: string | null;
+  /** 新鲜度状态：fresh/stale/inactive/unavailable/unknown；见后端 nav_data_status。 */
+  navStatus: string | null;
   changePct: number | null;
   oneYearReturn: number | null;
   riskLevel: "低" | "中低" | "中" | "中高" | "高" | null;
@@ -60,7 +64,8 @@ export interface TopHolding {
   name: string;
   code?: string;
   weight: number;
-  changePct: number;
+  /** 后端 TopHolding.change_pct 为 float|None；缺失时为 null，不得当 0。 */
+  changePct: number | null;
   assetType?: "股票" | "债券" | "基金" | "其他";
 }
 
@@ -72,8 +77,8 @@ export interface FundDetail extends FundSummary {
   tags: string[];
   description: string;
   manager: string;
-  /** 基金经理从业天数；数据源未提供时为 undefined（不做任何估算或补齐）。 */
-  managerDays?: number;
+  /** 基金经理从业天数；数据源未提供时为 null（不做任何估算或补齐）。 */
+  managerDays: number | null;
   rating: number | null; // 1 - 5
   topHoldings: TopHolding[];
   investmentStyle: string | null;
@@ -93,8 +98,10 @@ export interface KlinePoint {
   high: number;
   low: number;
   close: number;
-  volume?: number;   // ETF 成交量
-  turnover?: number;  // ETF 成交额
+  /** ETF 成交量；后端为 float|None，非 ETF 或无数据时为 null。 */
+  volume: number | null;
+  /** ETF 成交额；后端为 float|None，无数据时为 null。 */
+  turnover: number | null;
 }
 
 export interface DrawdownPoint {

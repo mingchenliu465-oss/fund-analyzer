@@ -361,18 +361,26 @@ export default function ComparePage() {
                     </td>
                     <td
                       className={`px-4 py-3 text-right tabular-nums font-medium ${
-                        (fund.detail?.changePct ?? 0) >= 0 ? "text-positive" : "text-negative"
+                        fund.detail?.changePct == null
+                          ? "text-muted-foreground"
+                          : fund.detail.changePct >= 0
+                            ? "text-positive"
+                            : "text-negative"
                       }`}
                     >
                       {fund.detail ? (
-                        <span className="inline-flex items-center gap-1">
-                          {(fund.detail.changePct ?? 0) >= 0 ? (
-                            <TrendingUp className="h-3 w-3" />
-                          ) : (
-                            <TrendingDown className="h-3 w-3" />
-                          )}
-                          {formatPercent((fund.detail.changePct ?? 0) * 0.01)}
-                        </span>
+                        fund.detail.changePct == null ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1">
+                            {fund.detail.changePct >= 0 ? (
+                              <TrendingUp className="h-3 w-3" />
+                            ) : (
+                              <TrendingDown className="h-3 w-3" />
+                            )}
+                            {formatPercent(fund.detail.changePct * 0.01)}
+                          </span>
+                        )
                       ) : (
                         "—"
                       )}
