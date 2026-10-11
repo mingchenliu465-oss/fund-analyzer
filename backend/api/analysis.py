@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 
 from models.analysis import (
     AICommentary,
+    FundStatisticsAudit,
     FundFlow,
     HoldStructure,
     PeerComparison,
@@ -30,6 +31,13 @@ def ai_commentary(code: str):
 def fund_drawdown(code: str, period: NavPeriod = NavPeriod.ONE_YEAR):
     _ensure_exists(code)
     return analysis_service.drawdown(code, period)
+
+
+@router.get("/statistics/{code}", response_model=FundStatisticsAudit)
+def fund_statistics(code: str, period: NavPeriod = NavPeriod.ONE_YEAR):
+    """返回净值质量审计与波动率 Bootstrap 区间。"""
+    _ensure_exists(code)
+    return analysis_service.statistics_audit(code, period)
 
 
 @router.get("/peers/{code}", response_model=list[PeerComparison])

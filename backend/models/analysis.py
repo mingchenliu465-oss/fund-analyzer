@@ -21,6 +21,43 @@ class AICommentary(BaseModel):
     suggestion: str
 
 
+class ConfidenceInterval(BaseModel):
+    """统计量的 Bootstrap 置信区间。"""
+
+    lower: float
+    upper: float
+    confidence: float = 0.95
+
+
+class ReturnOutlier(BaseModel):
+    """仅供复核的极端日收益；不会驱动任何数据删除。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    date: str
+    return_pct: float = Field(alias="returnPct")
+    modified_z_score: float = Field(alias="modifiedZScore")
+
+
+class FundStatisticsAudit(BaseModel):
+    """基金累计净值序列的数据质量与统计诊断。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    code: str
+    period: str
+    status: str
+    observations: int
+    valid_returns: int = Field(alias="validReturns")
+    duplicate_dates: int = Field(alias="duplicateDates")
+    non_positive_navs: int = Field(alias="nonPositiveNavs")
+    data_start: str | None = Field(alias="dataStart")
+    data_end: str | None = Field(alias="dataEnd")
+    outliers: list[ReturnOutlier]
+    volatility_ci: ConfidenceInterval | None = Field(default=None, alias="volatilityCi")
+    notes: list[str]
+
+
 class PeerComparison(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 

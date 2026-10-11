@@ -49,6 +49,7 @@ import {
   getFundDetail,
   getFundDrawdownHistory,
   getFundKlineHistory,
+  getFundStatisticsAudit,
   getHoldStructure,
   getPeerComparison,
   getReturnRanking,
@@ -129,6 +130,14 @@ export default function FundDetailPage() {
     staleTime: 5 * 60 * 1000,
     retry: 0,
     placeholderData: keepPreviousData,
+  });
+
+  const { data: statisticsAudit = null } = useQuery({
+    queryKey: ["statisticsAudit", code, period],
+    queryFn: () => getFundStatisticsAudit(code, period),
+    enabled: analysisEnabled && !!code,
+    staleTime: 5 * 60 * 1000,
+    retry: 0,
   });
 
   // ── React Query: 同类对比 ──
@@ -577,6 +586,42 @@ export default function FundDetailPage() {
             <p className="text-xs text-muted-foreground">综合评估基金风险收益特征</p>
           </div>
           <RiskIndicatorTable metrics={fund.metrics} />
+          {analysisEnabled && statisticsAudit && (
+            <div className="mt-4 border-t border-border pt-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-semibold">数据质量与统计区间</h4>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    基于累计净值；极端收益只提示复核，不会修改历史数据。
+                  </p>
+                </div>
+                <Badge variant={statisticsAudit.status === "review" ? "warning" : statisticsAudit.status === "available" ? "positive" : "outline"}>
+                  {statisticsAudit.status === "review" ? "需要复核" : statisticsAudit.status === "available" ? "数据可用" : "数据不足"}
+                </Badge>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+                <div className="rounded-lg border border-border p-2">
+                  <span className="block text-muted-foreground">净值观测</span>
+                  <strong className="mt-1 block tabular-nums">{statisticsAudit.observations}</strong>
+                </div>
+                <div className="rounded-lg border border-border p-2">
+                  <span className="block text-muted-foreground">极端日收益</span>
+                  <strong className="mt-1 block tabular-nums">{statisticsAudit.outliers.length}</strong>
+                </div>
+                <div className="rounded-lg border border-border p-2">
+                  <span className="block text-muted-foreground">重复日期</span>
+                  <strong className="mt-1 block tabular-nums">{statisticsAudit.duplicateDates}</strong>
+                </div>
+              </div>
+              {statisticsAudit.volatilityCi ? (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  年化波动率 95% 区间：{formatPercent(statisticsAudit.volatilityCi.lower)} ～ {formatPercent(statisticsAudit.volatilityCi.upper)}
+                </p>
+              ) : (
+                <p className="mt-3 text-xs text-muted-foreground">有效日收益不足，暂无法估计波动率区间。</p>
+              )}
+            </div>
+          )}
         </motion.div>
       </div>
 

@@ -102,6 +102,33 @@ export interface DrawdownPoint {
   drawdown: number; // negative, e.g. -0.18
 }
 
+export interface ConfidenceInterval {
+  lower: number;
+  upper: number;
+  confidence: number;
+}
+
+export interface ReturnOutlier {
+  date: string;
+  returnPct: number;
+  modifiedZScore: number;
+}
+
+export interface FundStatisticsAudit {
+  code: string;
+  period: string;
+  status: "available" | "review" | "insufficient" | "unavailable";
+  observations: number;
+  validReturns: number;
+  duplicateDates: number;
+  nonPositiveNavs: number;
+  dataStart: string | null;
+  dataEnd: string | null;
+  outliers: ReturnOutlier[];
+  volatilityCi: ConfidenceInterval | null;
+  notes: string[];
+}
+
 export interface MarketIndex {
   code: string;
   name: string;
@@ -463,6 +490,17 @@ export async function getFundDrawdownHistory(
 ): Promise<DrawdownPoint[]> {
   return fetchJson<DrawdownPoint[]>(
     `/api/analysis/drawdown/${encodeURIComponent(code.trim().toUpperCase())}?period=${encodeURIComponent(period)}`,
+    undefined,
+    DETAIL_TIMEOUT_MS
+  );
+}
+
+export async function getFundStatisticsAudit(
+  code: string,
+  period: NavPeriod = "1Y"
+): Promise<FundStatisticsAudit> {
+  return fetchJson<FundStatisticsAudit>(
+    `/api/analysis/statistics/${encodeURIComponent(code.trim().toUpperCase())}?period=${encodeURIComponent(period)}`,
     undefined,
     DETAIL_TIMEOUT_MS
   );

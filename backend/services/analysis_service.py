@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
 import akshare as ak
+import numpy as np
 import pandas as pd
 
 from services.fund_service import _call_akshare
@@ -14,18 +15,127 @@ from services.fund_service import _call_akshare
 from models.analysis import (
     AICommentary,
     AllocationItem,
+    ConfidenceInterval,
     FlowPeriod,
     FundFlow,
+    FundStatisticsAudit,
     HoldStructure,
     HoldStructurePoint,
     PeerComparison,
     PortfolioOverview,
     ReturnRanking,
+    ReturnOutlier,
 )
 from models.market import DrawdownPoint, NavPeriod, period_to_days
 from services import fund_service
 
 logger = logging.getLogger(__name__)
+
+
+def _bootstrap_volatility_ci(returns: np.ndarray, code: str) -> ConfidenceInterval | None:
+    """用固定种子的移动区块 Bootstrap 估计年化波动率区间。
+
+    净值收益有时间相关性，因此每次抽样保留短连续区块，而不是逐日独立抽样。
+    确定性区块抽样使同一份数据的结果可复现。
+    """
+    sample_size = len(returns)
+    if sample_size < 20:
+        return None
+
+    block_size = max(2, round(sample_size ** (1 / 3)))
+    seed = 20_261_005 + sum(ord(char) for char in code)
+    estimates = np.empty(600, dtype=float)
+    offsets = np.arange(block_size)
+    block_count = (sample_size + block_size - 1) // block_size
+    block_index = np.arange(block_count, dtype=np.int64)
+
+    for index in range(len(estimates)):
+        # 以确定性整数序列选择现有连续收益区块。它只重排已有观测，
+        # 不会生成或补造任何金融数据。
+        starts = (seed + index * 12_345 + block_index * 1_103_515_245) % sample_size
+        positions = (starts[:, None] + offsets).reshape(-1)[:sample_size] % sample_size
+        estimates[index] = float(np.std(returns[positions], ddof=0) * np.sqrt(252))
+
+    lower, upper = np.quantile(estimates, [0.025, 0.975])
+    return ConfidenceInterval(lower=round(float(lower), 6), upper=round(float(upper), 6))
+
+
+def statistics_audit(
+    code: str, period: NavPeriod = NavPeriod.ONE_YEAR,
+) -> FundStatisticsAudit:
+    """审计累计净值数据并标记极端收益，不改写或删除任何观测。"""
+    upper = code.strip().upper()
+    raw = fund_service.nav_history(upper)
+    if raw.empty:
+        return FundStatisticsAudit(
+            code=upper, period=period.value, status="unavailable", observations=0,
+            valid_returns=0, duplicate_dates=0, non_positive_navs=0,
+            data_start=None, data_end=None, outliers=[], volatility_ci=None,
+            notes=["暂无可用累计净值数据，无法进行统计诊断。"],
+        )
+
+    frame = raw.copy()
+    frame["净值日期"] = pd.to_datetime(frame["净值日期"], errors="coerce")
+    frame = frame.dropna(subset=["净值日期"])
+    cutoff = pd.Timestamp.now().normalize() - pd.Timedelta(days=period_to_days(period))
+    frame = frame[frame["净值日期"] >= cutoff].copy()
+    if frame.empty:
+        return FundStatisticsAudit(
+            code=upper, period=period.value, status="unavailable", observations=0,
+            valid_returns=0, duplicate_dates=0, non_positive_navs=0,
+            data_start=None, data_end=None, outliers=[], volatility_ci=None,
+            notes=["选定周期内没有可用累计净值数据。"],
+        )
+
+    basis = pd.to_numeric(fund_service.total_return_series(frame), errors="coerce")
+    duplicate_dates = int(frame["净值日期"].duplicated().sum())
+    non_positive_navs = int((basis <= 0).sum())
+    usable = frame.assign(_basis=basis)
+    usable = usable[usable["_basis"].notna() & (usable["_basis"] > 0)]
+    usable = usable.sort_values("净值日期").drop_duplicates("净值日期", keep="last")
+    returns = usable["_basis"].pct_change(fill_method=None).dropna()
+
+    outliers: list[ReturnOutlier] = []
+    if len(returns) >= 5:
+        median = float(returns.median())
+        mad = float((returns - median).abs().median())
+        if mad > 0:
+            z_scores = 0.6745 * (returns - median) / mad
+            flagged = z_scores[z_scores.abs() > 6.0]
+            for row_index, score in flagged.iloc[:20].items():
+                outliers.append(ReturnOutlier(
+                    date=usable.loc[row_index, "净值日期"].strftime("%Y-%m-%d"),
+                    return_pct=round(float(returns.loc[row_index]), 6),
+                    modified_z_score=round(float(score), 3),
+                ))
+
+    returns_array = returns.to_numpy(dtype=float)
+    notes = [
+        "收益、异常标记和波动率均以累计净值为基准；异常点仅提示复核，未被删除或修正。",
+        "波动率区间使用确定性移动区块 Bootstrap（95% 置信水平），结果可复现。",
+    ]
+    volatility_ci = _bootstrap_volatility_ci(returns_array, upper)
+    if volatility_ci is None:
+        notes.append("有效日收益少于 20 个，暂不计算波动率置信区间。")
+
+    status = "review" if duplicate_dates or non_positive_navs or outliers else "available"
+    if len(returns) < 2:
+        status = "insufficient"
+        notes.append("有效日收益不足，诊断结果仅供数据完整性参考。")
+    return FundStatisticsAudit(
+        code=upper,
+        period=period.value,
+        status=status,
+        observations=len(frame),
+        valid_returns=len(returns),
+        duplicate_dates=duplicate_dates,
+        non_positive_navs=non_positive_navs,
+        data_start=usable["净值日期"].min().strftime("%Y-%m-%d") if not usable.empty else None,
+        data_end=usable["净值日期"].max().strftime("%Y-%m-%d") if not usable.empty else None,
+        outliers=outliers,
+        volatility_ci=volatility_ci,
+        notes=notes,
+    )
 
 
 def drawdown(code: str, period: NavPeriod = NavPeriod.ONE_YEAR) -> list[DrawdownPoint]:
