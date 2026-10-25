@@ -103,23 +103,28 @@ export default function ReviewPage() {
   // Generate insights
   const insights: { icon: typeof Trophy; title: string; content: string }[] = [];
   if (hasData) {
-    const bestHolding = [...activeHoldings].sort((a, b) => (b.profit_pct ?? 0) - (a.profit_pct ?? 0))[0];
-    const worstHolding = [...activeHoldings].sort((a, b) => (a.profit_pct ?? 0) - (b.profit_pct ?? 0))[0];
+    // 收益缺失（profit_pct 为 null）的持仓不得参与"最好/最差"评选：
+    // 用 ?? 0 排序会把"没数据"当成 0% 混进排名，文案还会把缺失说成具体涨幅。
+    const ratedHoldings = activeHoldings.filter(
+      (h): h is HoldingItem & { profit_pct: number } => h.profit_pct != null
+    );
+    const bestHolding = [...ratedHoldings].sort((a, b) => b.profit_pct - a.profit_pct)[0];
+    const worstHolding = [...ratedHoldings].sort((a, b) => a.profit_pct - b.profit_pct)[0];
     const stockRatio = (typeMap["股票型"]?.value ?? 0) + (typeMap["ETF"]?.value ?? 0) + (typeMap["ETF联接"]?.value ?? 0);
     const bondRatio = (typeMap["债券型"]?.value ?? 0) + (typeMap["货币型"]?.value ?? 0);
 
-    if (bestHolding && (bestHolding.profit_pct ?? 0) > 0) {
+    if (bestHolding && bestHolding.profit_pct > 0) {
       insights.push({
         icon: Trophy,
         title: "最佳表现",
-        content: `${bestHolding.fund_name} 盈利 ${(bestHolding.profit_pct ?? 0).toFixed(2)}%，是当前持仓中表现最好的基金。`,
+        content: `${bestHolding.fund_name} 盈利 ${bestHolding.profit_pct.toFixed(2)}%，是当前持仓中表现最好的基金。`,
       });
     }
-    if (worstHolding && (worstHolding.profit_pct ?? 0) < 0) {
+    if (worstHolding && worstHolding.profit_pct < 0) {
       insights.push({
         icon: Target,
         title: "需关注",
-        content: `${worstHolding.fund_name} 亏损 ${Math.abs(worstHolding.profit_pct ?? 0).toFixed(2)}%，建议评估是否继续持有或调整仓位。`,
+        content: `${worstHolding.fund_name} 亏损 ${Math.abs(worstHolding.profit_pct).toFixed(2)}%，建议评估是否继续持有或调整仓位。`,
       });
     }
     if (totalValue > 0) {

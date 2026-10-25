@@ -45,9 +45,11 @@ def test_holdings_lifecycle_without_implicit_snapshot(client):
     for _ in range(2):
         summary = client.get("/api/portfolio").json()
         assert summary["total_profit"] == 99
-    # GET /api/portfolio 是纯读取：不再顺带写入当日快照，所以历史应为空。
+    # 快照只由显式写操作记录：上面的 POST 成功后已记 1 条当日快照；
+    # 随后的多次 GET /api/portfolio 是纯读取，不会再增加快照。
     history = client.get("/api/portfolio/history?period=ALL").json()["points"]
-    assert history == []
+    assert len(history) == 1
+    assert history[0]["total_value"] == 200
     attribution = client.get("/api/portfolio/attribution")
     assert attribution.status_code == 200
     assert attribution.json()["today_return"] == 10

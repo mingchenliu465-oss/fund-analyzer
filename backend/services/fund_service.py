@@ -8,11 +8,13 @@
 from __future__ import annotations
 
 import bisect
+import json
 import logging
 import re
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from threading import Lock, Thread
 from typing import Any, Callable, TypeVar
 
@@ -56,6 +58,54 @@ def _get_cache(key: str) -> Any | None:
 
 def _set_cache(key: str, value: Any, ttl: int = _DEFAULT_TTL_SECONDS) -> None:
     _CACHE[key] = (value, time.time() + ttl)
+
+
+# ---------------------------------------------------------------------------
+# 基金列表落盘缓存：内存缓存之外的最后一层真实数据快照。
+# 拉取成功时落盘；拉取失败且内存无缓存时读回这份旧列表（列表项自带
+# nav_date/nav_status，旧数据的日期与新鲜度不会被篡改）。这与 rankings
+# 保留过期快照的模式一致：返回的是上次真实拉到的数据，不是编造数据。
+# 文件在 backend/database/ 下，已被 .gitignore 覆盖，不进 git。
+# ---------------------------------------------------------------------------
+
+_FUND_LIST_DISK_CACHE_PATH = (
+    Path(__file__).resolve().parent.parent / "database" / "fund_list_cache.json"
+)
+_DISK_CACHE_TTL_SECONDS = 600  # 落盘兜底读回后在内存里保留 10 分钟，避免每次请求都重试慢源
+
+
+def _write_fund_list_disk_cache(funds: list[FundSummary]) -> None:
+    """把一次真实拉取成功的基金列表落盘。失败只记日志，不影响本次返回。"""
+    try:
+        payload = {
+            "saved_at": datetime.now().isoformat(timespec="seconds"),
+            "funds": [f.model_dump(by_alias=True) for f in funds],
+        }
+        _FUND_LIST_DISK_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _FUND_LIST_DISK_CACHE_PATH.write_text(
+            json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+        )
+    except Exception as exc:  # noqa: BLE001 - 落盘失败不得让成功的拉取变失败
+        logger.warning("Failed to write fund list disk cache: %s", exc)
+
+
+def _read_fund_list_disk_cache() -> list[FundSummary]:
+    """读回落盘的旧基金列表；文件不存在/损坏/为空时返回空列表。"""
+    try:
+        raw = _FUND_LIST_DISK_CACHE_PATH.read_text(encoding="utf-8")
+        payload = json.loads(raw)
+        items = payload.get("funds") or []
+        funds = [FundSummary(**item) for item in items]
+    except Exception as exc:  # noqa: BLE001 - 读不回就当没有这层缓存
+        logger.warning("Failed to read fund list disk cache: %s", exc)
+        return []
+    if funds:
+        logger.warning(
+            "Using fund list DISK cache saved at %s (%d funds): live source unavailable",
+            payload.get("saved_at"),
+            len(funds),
+        )
+    return funds
 
 
 # -----------------------------------------------------------------------------
@@ -269,7 +319,8 @@ def _build_enrichment_lookup() -> dict[str, dict[str, float | None]]:
 def _load_fund_list() -> list[FundSummary]:
     """从 akshare 拉取全部基金列表，用排行榜数据丰富后缓存。
 
-    失败时返回空列表：绝不返回硬编码的替代基金池（那会让用户看到
+    失败时先回退落盘缓存（上次真实拉取成功的旧列表），没有落盘才
+    返回空列表：绝不返回硬编码的替代基金池（那会让用户看到
     真实代码 + 伪造净值的基金）。
     """
     cached = _get_cache("fund_list")
@@ -334,11 +385,20 @@ def _load_fund_list() -> list[FundSummary]:
                     )
                 )
             _set_cache("fund_list", funds, _LIST_TTL_SECONDS)
+            if funds:
+                _write_fund_list_disk_cache(funds)
             enriched_count = sum(1 for f in funds if f.nav is not None and f.nav > 0)
             logger.info("Fund list loaded: %d total, %d enriched with real data", len(funds), enriched_count)
             return funds
         except Exception as exc:
-            logger.warning("akshare fund_name_em failed: %s (returning empty list)", exc)
+            logger.warning("akshare fund_name_em failed: %s", exc)
+            # 源头失败且内存无缓存：回退到上次真实拉取成功后落盘的旧列表
+            # （日期/新鲜度字段原样保留，不冒充新数据）；没有落盘才返回空。
+            disk_funds = _read_fund_list_disk_cache()
+            if disk_funds:
+                _set_cache("fund_list", disk_funds, _DISK_CACHE_TTL_SECONDS)
+                return disk_funds
+            logger.warning("No fund list disk cache available; returning empty list")
             return []
 
 

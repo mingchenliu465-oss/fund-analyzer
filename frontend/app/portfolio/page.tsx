@@ -348,6 +348,8 @@ export default function PortfolioPage() {
   const totalCost = portfolio?.total_cost ?? 0;
   const totalProfit = portfolio?.total_profit ?? 0;
   const isUp = totalProfit >= 0;
+  // 浮动盈亏为 null 表示估值不完整：方向与百分比都不得用 ?? 0 伪装成"+0.00% 上涨"。
+  // 判断必须内联写在用到的地方，TS 无法通过中间布尔变量收窄 null 类型。
 
   if (loading)
     return (
@@ -562,9 +564,9 @@ export default function PortfolioPage() {
         />
         <MetricCard
           title="浮动盈亏"
-          value={`¥${totalProfit.toLocaleString()}`}
-          trend={isUp ? "up" : "down"}
-          trendValue={`${isUp ? "+" : ""}${(portfolio?.total_profit_pct ?? 0).toFixed(2)}%`}
+          value={portfolio?.total_profit != null ? `¥${totalProfit.toLocaleString()}` : "暂无"}
+          trend={portfolio?.total_profit != null ? (isUp ? "up" : "down") : "neutral"}
+          trendValue={portfolio?.total_profit_pct != null ? `${isUp ? "+" : ""}${portfolio.total_profit_pct.toFixed(2)}%` : undefined}
           icon={TrendingUp}
           delay={0.2}
         />
@@ -1161,7 +1163,7 @@ function HoldingsTable({
               </td>
               <td
                 className={`px-4 py-3 text-right tabular-nums font-medium ${
-                  (h.profit ?? 0) >= 0 ? "text-positive" : "text-negative"
+                  h.profit == null ? "" : h.profit >= 0 ? "text-positive" : "text-negative"
                 }`}
               >
                 {h.profit != null ? (
