@@ -47,9 +47,11 @@ def stub_fund(code: str = "000001", name: str = "测试基金") -> FundSummary:
 # ---------------------------------------------------------------------------
 
 
-def test_load_fund_list_returns_empty_when_source_fails():
-    """fund_name_em 失败时必须返回空列表，而不是硬编码基金池。"""
+def test_load_fund_list_returns_empty_when_source_fails(tmp_path):
+    """fund_name_em 失败且没有落盘缓存时必须返回空列表，而不是硬编码基金池。"""
     with patch.dict(fund_service._CACHE, {}, clear=True), patch.object(
+        fund_service, "_FUND_LIST_DISK_CACHE_PATH", tmp_path / "no_disk_cache.json"
+    ), patch.object(
         fund_service.ak, "fund_name_em", side_effect=RuntimeError("offline")
     ):
         assert fund_service._load_fund_list() == []

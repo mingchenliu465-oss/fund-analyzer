@@ -340,6 +340,7 @@ def add_holding(data: HoldingCreate) -> HoldingItem:
     conn.commit()
     row = conn.execute("SELECT * FROM holdings WHERE id = ?", [cur.lastrowid]).fetchone()
     conn.close()
+    _record_snapshot_after_write()
     return _holding_no_nav(_row_to_dict(row))
 
 
@@ -355,6 +356,7 @@ def mark_sold(holding_id: int, data: SellRequest) -> HoldingItem | None:
     conn.close()
     if not row:
         return None
+    _record_snapshot_after_write()
     return _holding_no_nav(_row_to_dict(row))
 
 
@@ -363,7 +365,10 @@ def delete_holding(holding_id: int) -> bool:
     cur = conn.execute("DELETE FROM holdings WHERE id = ?", [holding_id])
     conn.commit()
     conn.close()
-    return cur.rowcount > 0
+    deleted = cur.rowcount > 0
+    if deleted:
+        _record_snapshot_after_write()
+    return deleted
 
 
 def update_holding(holding_id: int, data: HoldingCreate) -> HoldingItem | None:
@@ -381,6 +386,7 @@ def update_holding(holding_id: int, data: HoldingCreate) -> HoldingItem | None:
     conn.close()
     if not row:
         return None
+    _record_snapshot_after_write()
     return _holding_no_nav(_row_to_dict(row))
 
 
@@ -509,11 +515,10 @@ def portfolio_summary() -> PortfolioSummary:
     )
 
     # 纯读取：本函数由 GET /api/portfolio 调用，绝不能产生写操作。
-    # 快照写入已从这里移除（原先每个 GET 都会 upsert 一行，导致
-    # ① 读接口带副作用、破坏 HTTP 语义与缓存；
-    # ② 历史曲线只由"用户恰好打开过页面的日子"构成，数据严重有偏）。
-    # 需要写入快照时必须由显式的写路径（专用接口或定时任务）调用
-    # _upsert_snapshot，不得挂在 GET 上。
+    # 快照写入只由显式写路径在写操作成功后调用 _record_snapshot_after_write()
+    # -> _upsert_snapshot（见下方），不得挂在 GET 上：
+    # ① 读接口带副作用会破坏 HTTP 语义与缓存；
+    # ② 历史曲线若只由"用户恰好打开过页面的日子"构成，数据严重有偏。
 
     return PortfolioSummary(
         total_cost=round(total_cost, 2),
@@ -562,6 +567,36 @@ def _upsert_snapshot(
     )
     conn.commit()
     conn.close()
+
+
+def _record_snapshot_after_write() -> None:
+    """持仓写操作成功后，把当日组合快照记一笔。
+
+    这是 _upsert_snapshot 唯一的调用路径：只挂在显式写操作
+    （add/update/delete/sell/auto_drip）成功之后，绝不挂在 GET 上。
+    _upsert_snapshot 按日期幂等，同一天多次写只更新同一行。
+
+    估值不完整（total_value/profit/profit_pct 为 None）时不写，
+    避免把部分估值记成完整的历史事实；写快照本身失败只记日志，
+    不能让已经成功的持仓写操作因此报错。
+    """
+    try:
+        summary = portfolio_summary()
+        if (
+            summary.total_value is None
+            or summary.total_profit is None
+            or summary.total_profit_pct is None
+        ):
+            logger.info("snapshot skipped: portfolio valuation incomplete")
+            return
+        _upsert_snapshot(
+            summary.total_value,
+            summary.total_cost,
+            summary.total_profit,
+            summary.total_profit_pct,
+        )
+    except Exception as exc:  # noqa: BLE001 - 快照失败不得影响写操作
+        logger.warning("snapshot after write failed: %s", exc)
 
 
 def portfolio_history(period: str = "1M") -> list[dict]:
@@ -966,6 +1001,8 @@ def auto_drip(data: DripCreate) -> dict:
     finally:
         conn.close()
 
+    if created:
+        _record_snapshot_after_write()
     return {"created": len(created), "items": created, "skipped": skipped}
 
 

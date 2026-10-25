@@ -32,6 +32,7 @@ backend/.env
 backend/database/*.db
 backend/database/*.db-wal
 backend/database/*.db-shm
+backend/database/fund_list_cache.json
 .pytest_cache/
 node_modules/
 .next/
