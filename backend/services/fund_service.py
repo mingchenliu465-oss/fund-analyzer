@@ -570,7 +570,10 @@ def _fetch_nav_history(code: str) -> pd.DataFrame:
     519066 差 133pp —— 且 110022/000961 差 0，抽查时看不出问题。
 
     累计净值缺失的行直接丢弃并记录条数：不做任何替代，也不静默回退到单位净值。
-    取不到时返回空的同结构 DataFrame —— 不生成任何替代净值序列。
+    净值 <= 0 的行同样丢弃并记录条数：基金净值不可能是零或负数，这类行只能是
+    上游脏数据；放行会让下游除法产生 inf/无意义收益（此前只有回测引擎在消费端
+    单独过滤非正值，详情页的风险指标计算完全没有这道防线，属于入口与消费端
+    防御不一致）。取不到时返回空的同结构 DataFrame —— 不生成任何替代净值序列。
     """
     cache_key = f"nav:{code}"
     cached = _get_cache(cache_key)
@@ -585,6 +588,13 @@ def _fetch_nav_history(code: str) -> pd.DataFrame:
         unit["净值日期"] = pd.to_datetime(unit["净值日期"])
         unit["单位净值"] = pd.to_numeric(unit["单位净值"], errors="coerce")
         unit = unit.dropna(subset=["单位净值"])
+        nonpositive_unit = int((unit["单位净值"] <= 0).sum())
+        if nonpositive_unit:
+            logger.warning(
+                "nav history %s: dropping %d rows with non-positive unit NAV",
+                code, nonpositive_unit,
+            )
+            unit = unit[unit["单位净值"] > 0]
 
         cumulative = _call_akshare(
             ak.fund_open_fund_info_em, symbol=code, indicator="累计净值走势", period="成立来"
@@ -593,6 +603,13 @@ def _fetch_nav_history(code: str) -> pd.DataFrame:
         cumulative["净值日期"] = pd.to_datetime(cumulative["净值日期"])
         cumulative["累计净值"] = pd.to_numeric(cumulative["累计净值"], errors="coerce")
         cumulative = cumulative.dropna(subset=["累计净值"])
+        nonpositive_cum = int((cumulative["累计净值"] <= 0).sum())
+        if nonpositive_cum:
+            logger.warning(
+                "nav history %s: dropping %d rows with non-positive cumulative NAV",
+                code, nonpositive_cum,
+            )
+            cumulative = cumulative[cumulative["累计净值"] > 0]
         cumulative = cumulative.drop_duplicates(subset=["净值日期"], keep="last")
 
         df = unit.merge(cumulative[["净值日期", "累计净值"]], on="净值日期", how="left")
