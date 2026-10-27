@@ -12,6 +12,7 @@ const navItems = [
   { href: "/portfolio", label: "我的组合", icon: PieChart },
   { href: "/insights", label: "组合洞察", icon: Sparkles },
   { href: "/compare", label: "基金对比", icon: Scale },
+  { href: "/backtest", label: "诚实回测", icon: History },
   { href: "/review", label: "投资复盘", icon: FileText },
   { href: "/history-frequency", label: "历史频率", icon: History },
 ];

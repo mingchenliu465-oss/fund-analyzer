@@ -513,6 +513,107 @@ export async function getFundStatisticsAudit(
   );
 }
 
+// ---------------------------------------------------------------------------
+// 诚实回测（字段与后端 services/backtest_service.py 的报告 dict 逐一对齐，
+// 键名即线上格式，不做改名映射，避免口径在转换中漂移）
+// ---------------------------------------------------------------------------
+
+export interface BacktestTrade {
+  buy_date: string;
+  buy_nav: number;
+  sell_date: string | null;
+  sell_nav: number | null;
+  holding_days: number | null;
+  buy_fee: number;
+  sell_fee: number | null;
+  return_pct: number | null;
+  open: boolean;
+}
+
+export interface BacktestYearRow {
+  year: number;
+  strategy_return: number;
+  benchmark_return: number;
+  excess_return: number;
+  strategy_max_drawdown: number;
+  strategy_volatility: number | null;
+  failed: boolean;
+}
+
+export interface BacktestCombo {
+  threshold: number;
+  hold_months: number;
+  total_return: number;
+  benchmark_return: number;
+  excess_return: number;
+  max_drawdown: number;
+  volatility: number | null;
+  completed_trades: number;
+  open_trades: number;
+  trades: BacktestTrade[];
+  yearly: BacktestYearRow[];
+  failed_years: number[];
+  conclusion: string;
+  conclusion_reason: string;
+  equity_monthly: {
+    dates: string[];
+    strategy: number[];
+    benchmark: number[];
+  };
+}
+
+export interface BacktestReport {
+  code: string;
+  name: string;
+  status: "ok" | "refused";
+  refusal_reason: string | null;
+  data_start: string | null;
+  data_end: string | null;
+  eval_start: string | null;
+  warmup_days: number;
+  combos: BacktestCombo[];
+  disclosures: string[];
+}
+
+/** 统计 6 种组合各自结论的分布（页面总览用；结论本身由后端固定规则给出）。 */
+export function countConclusions(combos: Pick<BacktestCombo, "conclusion">[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const combo of combos) {
+    counts[combo.conclusion] = (counts[combo.conclusion] ?? 0) + 1;
+  }
+  return counts;
+}
+
+/** fetchJson 的错误消息内嵌后端 {"detail": ...} 原文，提取出来给用户看原话。 */
+function extractApiDetail(err: unknown): string {
+  if (err instanceof Error) {
+    const match = err.message.match(/\{[\s\S]*\}/);
+    if (match) {
+      try {
+        const parsed = JSON.parse(match[0]) as { detail?: unknown };
+        if (typeof parsed.detail === "string" && parsed.detail) return parsed.detail;
+      } catch {
+        // 不是 JSON 就落回原始消息
+      }
+    }
+    return err.message;
+  }
+  return "请求失败，请稍后重试";
+}
+
+export async function getBacktestReport(code: string): Promise<BacktestReport> {
+  try {
+    // 全程历史净值冷拉取 + 6 组合计算可能较慢，给足超时，不用默认 30 秒。
+    return await fetchJson<BacktestReport>(
+      `/api/backtest/${encodeURIComponent(code.trim().toUpperCase())}`,
+      undefined,
+      120000
+    );
+  } catch (err) {
+    throw new Error(extractApiDetail(err));
+  }
+}
+
 export async function listPopularFunds(limit = 6): Promise<FundSummary[]> {
   return fetchJson<FundSummary[]>(`/api/funds/popular?limit=${limit}`);
 }
