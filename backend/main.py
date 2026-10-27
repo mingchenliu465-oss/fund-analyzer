@@ -37,7 +37,7 @@ from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
-from api import analysis, fund, market, portfolio, review
+from api import analysis, backtest, fund, market, portfolio, review
 from services import fund_service
 
 # 用于后台预热缓存的线程池
@@ -82,6 +82,7 @@ app.include_router(market.router, prefix="/api")
 app.include_router(analysis.router, prefix="/api")
 app.include_router(portfolio.router, prefix="/api")
 app.include_router(review.router, prefix="/api")
+app.include_router(backtest.router, prefix="/api")
 
 
 @app.exception_handler(Exception)

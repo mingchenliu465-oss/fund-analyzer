@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatCurrency, formatPercent, formatPercentValue } from "./fund";
+import { countConclusions, formatCurrency, formatPercent, formatPercentValue } from "./fund";
 
 // 两种百分比语义必须分清（这是"首页累计收益率被放大 100 倍"的根因）：
 // - formatPercent      接收小数比率：0.9802 -> +98.02%
@@ -30,6 +30,24 @@ describe("缺失值必须显示为 —，不得伪装成 0", () => {
       expect(formatPercentValue(missing)).toBe("—");
       expect(formatCurrency(missing)).toBe("—");
     }
+  });
+});
+
+describe("countConclusions（回测总览的结论分布）", () => {
+  it("按结论原文计数，不合并、不改名", () => {
+    const combos = [
+      { conclusion: "不成立" },
+      { conclusion: "不成立" },
+      { conclusion: "证据不足" },
+      { conclusion: "成立" },
+      { conclusion: "不成立" },
+      { conclusion: "证据不足" },
+    ];
+    expect(countConclusions(combos)).toEqual({ 不成立: 3, 证据不足: 2, 成立: 1 });
+  });
+
+  it("空组合返回空对象", () => {
+    expect(countConclusions([])).toEqual({});
   });
 });
 
