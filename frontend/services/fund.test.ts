@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { countConclusions, formatCurrency, formatPercent, formatPercentValue } from "./fund";
+import {
+  countConclusions,
+  formatCurrency,
+  formatPercent,
+  formatPercentValue,
+  plainBacktestSummary,
+} from "./fund";
 
 // 两种百分比语义必须分清（这是"首页累计收益率被放大 100 倍"的根因）：
 // - formatPercent      接收小数比率：0.9802 -> +98.02%
@@ -48,6 +54,30 @@ describe("countConclusions（回测总览的结论分布）", () => {
 
   it("空组合返回空对象", () => {
     expect(countConclusions([])).toEqual({});
+  });
+});
+
+describe("plainBacktestSummary（结论总览的白话复述，只复述计数）", () => {
+  it("0 成立且有不成立时，明说没通过检验，数字来自动态计数", () => {
+    const text = plainBacktestSummary({ 不成立: 4, 证据不足: 2 }, 6);
+    expect(text).toContain("共检验了 6 种搭配：0 种成立、4 种不成立、2 种证据不足");
+    expect(text).toContain("没通过检验");
+  });
+
+  it("全部成立时只陈述每种都跑赢，不造新判定词", () => {
+    const text = plainBacktestSummary({ 成立: 6 }, 6);
+    expect(text).toContain("6 种成立、0 种不成立、0 种证据不足");
+    expect(text).toContain("每种搭配都跑赢了买入持有");
+    expect(text).not.toContain("没通过检验");
+  });
+
+  it("混合情形只报计数，不下合并结论、不推荐最优", () => {
+    const text = plainBacktestSummary({ 成立: 2, 不成立: 3, 证据不足: 1 }, 6);
+    expect(text).toContain("2 种成立、3 种不成立、1 种证据不足");
+    expect(text).not.toContain("没通过检验");
+    expect(text).not.toContain("每种搭配都跑赢");
+    expect(text).not.toContain("最优");
+    expect(text).not.toContain("推荐");
   });
 });
 
