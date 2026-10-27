@@ -584,6 +584,23 @@ export function countConclusions(combos: Pick<BacktestCombo, "conclusion">[]): R
   return counts;
 }
 
+/**
+ * 结论总览的白话复述：只复述计数事实，数字全部来自 countConclusions 的动态结果。
+ * 不新造单一总判定、不出现"最优组合"式推荐表述：
+ * - 全部成立时只陈述"每种搭配都跑赢了买入持有"；
+ * - 0 成立且有不成立时，才说"没通过检验"；
+ * - 其余混合情形只报计数，不下合并结论。
+ */
+export function plainBacktestSummary(counts: Record<string, number>, total: number): string {
+  const ok = counts["成立"] ?? 0;
+  const fail = counts["不成立"] ?? 0;
+  const insuff = counts["证据不足"] ?? 0;
+  const base = `这条「跌多了买」的规则，在这只基金上共检验了 ${total} 种搭配：${ok} 种成立、${fail} 种不成立、${insuff} 种证据不足。`;
+  if (total > 0 && ok === total) return `${base}每种搭配都跑赢了买入持有。`;
+  if (ok === 0 && fail > 0) return `${base}没有一种搭配跑赢买入持有——这条规则在这只基金上没通过检验。`;
+  return base;
+}
+
 /** fetchJson 的错误消息内嵌后端 {"detail": ...} 原文，提取出来给用户看原话。 */
 function extractApiDetail(err: unknown): string {
   if (err instanceof Error) {
