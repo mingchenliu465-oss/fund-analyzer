@@ -109,6 +109,12 @@ def get_fund_nav_history(
     if df.empty:
         return []
 
+    if len(df) < 2:
+        # 周期内只剩 1 个点时无法构成收益基准（total_return_series 要求
+        # >= 2 点）：与空帧路径一致返回 []，不要让 ValueError 冒成 500
+        # （条目 3 的 Bug B：短周期内仅 1 个观测日的基金可达此路径）。
+        return []
+
     # nav 按单位净值展示（用户理解的"净值"就是它）；normalized 是业绩曲线，
     # 必须用累计净值，否则每次分红都会在曲线上画出一段不存在的下跌。
     basis = fund_service.total_return_series(df).astype(float).values
