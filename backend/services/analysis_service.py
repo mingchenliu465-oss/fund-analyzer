@@ -149,6 +149,11 @@ def drawdown(code: str, period: NavPeriod = NavPeriod.ONE_YEAR) -> list[Drawdown
     df = df[df["净值日期"] >= cutoff].copy()
     if df.empty:
         return []
+    if len(df) < 2:
+        # 周期内只剩 1 个点：回撤无从定义，与空帧路径一致返回 []
+        # （条目 3 的 Bug B：total_return_series 要求 >= 2 点，
+        # 未捕获的 ValueError 会让接口返 500）。
+        return []
 
     df = df.sort_values("净值日期").reset_index(drop=True)
     df["净值日期"] = pd.to_datetime(df["净值日期"])
