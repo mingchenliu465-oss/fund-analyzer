@@ -645,6 +645,11 @@ def _fetch_nav_history(code: str) -> pd.DataFrame:
                 code, nonpositive_unit,
             )
             unit = unit[unit["单位净值"] > 0]
+        # 与累计净值侧对齐：单位净值侧也按日期去重（保留最后一行）。
+        # 此前只有累计侧去重，上游若在单位侧返回重复日期，merge 会把
+        # 同一天放大成多行（nav_store._normalize 本来就有去重，两条
+        # 路径口径不一致）。
+        unit = unit.drop_duplicates(subset=["净值日期"], keep="last")
 
         cumulative = _call_akshare(
             ak.fund_open_fund_info_em, symbol=code, indicator="累计净值走势", period="成立来",
