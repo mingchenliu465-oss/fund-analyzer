@@ -10,6 +10,7 @@ from __future__ import annotations
 import bisect
 import json
 import logging
+import math
 import re
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -545,7 +546,9 @@ def risk_level_from_volatility(volatility: float | None) -> str | None:
     说明：分档阈值是本项目自行约定的口径，必须与波动率一同展示，供使用者
     自行判断；它不代表任何监管或第三方评级。
     """
-    if volatility is None:
+    if volatility is None or not math.isfinite(volatility):
+        # nan/inf 不是“极高波动”：全部比较为 False 时旧实现会落到默认“高”，
+        # 把算不出来的波动率伪装成最高风险等级。不可用就返 None（不猜）。
         return None
     for upper, level in _VOLATILITY_LEVEL_BANDS:
         if volatility < upper:
@@ -904,11 +907,18 @@ def _metrics_from_nav(nav_df: pd.DataFrame, ftype: str) -> FundMetrics:
 
     净值点少于 3 个（即不足 2 个收益率样本）时统计量无定义，直接报错 ——
     绝不返回凭空设定的 volatility=0.02 / beta=0.5 / max_drawdown=0.0。
+
+    累计净值必须全部有限且 > 0：脏序列（0/负值/NaN/inf）会产出最大回撤
+    -2.0（回撤不可能低于 -100%）、波动率 nan 却标“高”等假指标。入口过滤
+    （`_fetch_nav_history`）是第一道防线，本函数自己再设一道——任何绕过
+    入口的调用都不得把脏数据算成看似正常的指标（条目 3 的 Bug A）。
     """
     if len(nav_df) < 3:
         raise ValueError("净值数据不足，无法计算风险指标")
 
     nav = total_return_series(nav_df).astype(float).values
+    if not all(math.isfinite(value) and value > 0 for value in nav):
+        raise ValueError("累计净值包含非正或非有限值，无法计算风险指标")
     returns = nav[1:] / nav[:-1] - 1
     if len(returns) < 2:
         raise ValueError("净值数据不足，无法计算波动率")
