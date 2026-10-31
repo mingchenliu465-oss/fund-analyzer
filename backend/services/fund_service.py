@@ -14,6 +14,7 @@ import math
 import re
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import TimeoutError as _FutureTimeoutError
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from threading import Lock, Thread
@@ -114,6 +115,10 @@ def _read_fund_list_disk_cache() -> list[FundSummary]:
 # -----------------------------------------------------------------------------
 
 _AKSHARE_TIMEOUT = 3  # 交互请求快速失败并回退缓存，避免页面长时间无响应
+# 全量净值历史（period="成立来"）是本服务最大的单次拉取，单位+累计两路
+# 串行，默认 3 秒偏紧（条目 2 审计：抖动时首拉失败、错误信息又为空）。
+# 只给这两路放宽到 15 秒；其余交互类调用继续用默认快速失败，不全局放大。
+_NAV_HISTORY_TIMEOUT = 15
 
 _AkExecute = TypeVar("_AkExecute")
 
@@ -121,7 +126,11 @@ _AkExecute = TypeVar("_AkExecute")
 def _call_akshare(func: Callable[..., _AkExecute], *args: Any, timeout: int = _AKSHARE_TIMEOUT, **kwargs: Any) -> _AkExecute:
     """在独立线程中调用 akshare 函数并设置超时。
 
-    超时时抛出 TimeoutError，调用方应捕获并回退到缓存/默认数据。
+    超时时抛出**带明确文字**的 TimeoutError（调用名 + `timeout after Xs`），
+    调用方应捕获并回退到缓存/默认数据。此前 `future.result(timeout)` 抛出的
+    TimeoutError 本身没有消息，日志里失败原因是空的，无法区分是超时还是
+    上游报错（条目 2 审计发现，2026-10-25 夜取数抖动的空错误与此同源）。
+    上游自身的异常原样透传（类型与消息不变），与超时可区分。
     这样可以避免 VPN 或代理导致的无限挂起。
     """
     future: Future[_AkExecute] = Future()
@@ -139,8 +148,14 @@ def _call_akshare(func: Callable[..., _AkExecute], *args: Any, timeout: int = _A
     thread.start()
     try:
         return future.result(timeout=timeout)
+    except _FutureTimeoutError:
+        # 超时：取消 future（线程会自行结束，daemon），并把原因写进异常文字。
+        if not future.done():
+            future.cancel()
+        name = getattr(func, "__name__", repr(func))
+        raise TimeoutError(f"akshare call {name} timeout after {timeout}s") from None
     except Exception:
-        # TimeoutError 或 akshare 内部异常：取消 future，但线程会自行结束（daemon）
+        # akshare 内部异常：取消 future，但原样透传，不吞消息。
         if not future.done():
             future.cancel()
         raise
@@ -585,7 +600,8 @@ def _fetch_nav_history(code: str) -> pd.DataFrame:
 
     try:
         unit = _call_akshare(
-            ak.fund_open_fund_info_em, symbol=code, indicator="单位净值走势", period="成立来"
+            ak.fund_open_fund_info_em, symbol=code, indicator="单位净值走势", period="成立来",
+            timeout=_NAV_HISTORY_TIMEOUT,
         )
         unit = unit.dropna(subset=["净值日期", "单位净值"])
         unit["净值日期"] = pd.to_datetime(unit["净值日期"])
@@ -600,7 +616,8 @@ def _fetch_nav_history(code: str) -> pd.DataFrame:
             unit = unit[unit["单位净值"] > 0]
 
         cumulative = _call_akshare(
-            ak.fund_open_fund_info_em, symbol=code, indicator="累计净值走势", period="成立来"
+            ak.fund_open_fund_info_em, symbol=code, indicator="累计净值走势", period="成立来",
+            timeout=_NAV_HISTORY_TIMEOUT,
         )
         cumulative = cumulative.dropna(subset=["净值日期", "累计净值"])
         cumulative["净值日期"] = pd.to_datetime(cumulative["净值日期"])
