@@ -578,6 +578,33 @@ def risk_level_from_volatility(volatility: float | None) -> str | None:
 
 _NAV_COLUMNS = ["净值日期", "单位净值", "累计净值", "日增长率"]
 
+# ---------------------------------------------------------------------------
+# 最近一次净值取数的结局：让“无数据”与“瞬时失败”在服务层可区分
+# ---------------------------------------------------------------------------
+# `_fetch_nav_history` 对外保持旧契约（失败返空帧，不改任何接口行为），
+# 但调用方此前分不清“该基金无数据”与“上游瞬时失败、值得重试”——
+# 2026-10-25 夜的取数抖动（首拉失败、重试成功）就被这个盲区吞掉了。
+# 这里以模块级单值记录最近一次取数的结局，服务层可据此诊断/决定重试：
+#   ok     —— 取到可用净值行；
+#   empty  —— 上游正常返回，但无可用行（无数据/全为脏行被丢弃）；
+#   failed —— 异常（超时/网络/列名变化），reason 带异常类型与消息。
+_last_nav_fetch: dict[str, Any] = {"code": None, "status": "unknown", "reason": None}
+
+
+def last_nav_fetch_status(code: str | None = None) -> dict[str, Any]:
+    """最近一次 `_fetch_nav_history` 的结局（ok/empty/failed/unknown）。
+
+    传入 code 时，仅当记录的正是该基金才返回其状态，否则返回 unknown——
+    不把别的基金的失败安到这只头上。
+    """
+    if code is not None and _last_nav_fetch.get("code") != code:
+        return {"code": code, "status": "unknown", "reason": None}
+    return dict(_last_nav_fetch)
+
+
+def _record_nav_fetch(code: str, status: str, reason: str | None = None) -> None:
+    _last_nav_fetch.update({"code": code, "status": status, "reason": reason})
+
 
 def _fetch_nav_history(code: str) -> pd.DataFrame:
     """获取场外基金历史净值 DataFrame，列：净值日期、单位净值、累计净值、日增长率。
@@ -592,6 +619,10 @@ def _fetch_nav_history(code: str) -> pd.DataFrame:
     上游脏数据；放行会让下游除法产生 inf/无意义收益（此前只有回测引擎在消费端
     单独过滤非正值，详情页的风险指标计算完全没有这道防线，属于入口与消费端
     防御不一致）。取不到时返回空的同结构 DataFrame —— 不生成任何替代净值序列。
+
+    返回值本身不区分“无数据”与“瞬时失败”（旧契约），但每次取数的结局会
+    记入 `last_nav_fetch_status()`：ok / empty / failed（带原因），供调用方
+    在服务层区分这两种空——该区分方式的理由见该函数的定义处注释。
     """
     cache_key = f"nav:{code}"
     cached = _get_cache(cache_key)
@@ -642,10 +673,12 @@ def _fetch_nav_history(code: str) -> pd.DataFrame:
         df = df.dropna(subset=["累计净值"])
         df = df.sort_values("净值日期").reset_index(drop=True)
         df = df[_NAV_COLUMNS]
+        _record_nav_fetch(code, "ok" if not df.empty else "empty")
         _set_cache(cache_key, df, ttl=3600)  # 1 小时，净值日内不变
         return df
     except Exception as exc:
         logger.warning("nav history fetch failed for %s: %s", code, exc)
+        _record_nav_fetch(code, "failed", f"{type(exc).__name__}: {exc}")
         return pd.DataFrame(columns=_NAV_COLUMNS)
 
 
