@@ -38,6 +38,18 @@ def _optional_float(value: Any) -> float | None:
         return None
     return parsed if pd.notna(parsed) else None
 
+
+def _optional_nav(value: Any) -> float | None:
+    """净值专用解析：非正值不是真实净值，按缺失（None）处理。
+
+    基金净值不可能是 0 或负数，这类值只能是上游脏数据。榜单/名录侧此前
+    经 `_optional_float` 原样收纳负净值，列表页可能展示负净值（条目 2
+    审计发现）。涨跌幅、近一年收益、折价率等可正可负的字段不走这里，
+    仍用 `_optional_float` / `_optional_percent`。
+    """
+    parsed = _optional_float(value)
+    return parsed if parsed is not None and parsed > 0 else None
+
 # -----------------------------------------------------------------------------
 # Cache
 # -----------------------------------------------------------------------------
@@ -310,7 +322,7 @@ def _build_enrichment_lookup() -> dict[str, dict[str, float | None]]:
             code = str(row.get("基金代码", "")).strip()
             if not code:
                 continue
-            nav = _optional_float(row.get("单位净值"))
+            nav = _optional_nav(row.get("单位净值"))
             change = _optional_float(row.get("日增长率"))
             raw_ret = _optional_float(row.get("近1年"))
             ret_1y = raw_ret / 100 if raw_ret is not None else None
@@ -516,8 +528,8 @@ def _etf_registry() -> dict[str, dict[str, Any]]:
                 "name": str(row.get("基金简称", "")).strip(),
                 "type": str(row.get("类型", "")).strip(),
                 "nav_date": latest_date,
-                "unit_nav": _optional_float(row.get(unit_col)) if unit_col else None,
-                "cumulative_nav": _optional_float(row.get(cumulative_col)) if cumulative_col else None,
+                "unit_nav": _optional_nav(row.get(unit_col)) if unit_col else None,
+                "cumulative_nav": _optional_nav(row.get(cumulative_col)) if cumulative_col else None,
                 "market_price": _optional_float(row.get("市价")),
                 # 折价率源数据是 '-0.06%' 这样的字符串，必须按百分数解析；
                 # 用 _optional_float 会静默变成 None，把真实的折溢价信息丢掉。
@@ -1328,7 +1340,7 @@ def _fetch_rankings() -> list[FundSummary]:
             name = str(row.get("基金简称", "")).strip()
             raw_type = str(row.get("类型", "")).strip() if "类型" in df.columns else ""
             ftype = _simplify_type(raw_type) if raw_type else ("ETF" if _is_etf_code(code) else "未知")
-            nav = _optional_float(row.get("单位净值")) if "单位净值" in df.columns else None
+            nav = _optional_nav(row.get("单位净值")) if "单位净值" in df.columns else None
             change_pct = _optional_float(row.get("日增长率")) if "日增长率" in df.columns else None
             raw_one_year = _optional_float(row.get("近1年")) if "近1年" in df.columns else None
             one_year = raw_one_year / 100 if raw_one_year is not None else None
