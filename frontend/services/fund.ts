@@ -820,3 +820,97 @@ export function formatAsset(value: number | null | undefined): string {
   if (v >= 10000) return `${(v / 10000).toFixed(2)}万`;
   return v.toFixed(2);
 }
+
+// ---------------------------------------------------------------------------
+// 历史频率（条目 11 历史频率版原型）：只呈现滚动历史频率，不建模型、
+// 不对未来做任何判断。接口与类型由 backend/services/history_frequency.py
+// 定义，后端测试守住其完整性。
+// ---------------------------------------------------------------------------
+
+export interface FrequencyStat {
+  freq: number | null;
+  count: number;
+  n: number;
+}
+
+export interface HistoryFrequencyYearRow {
+  year: number;
+  n: number;
+  positive_12m: FrequencyStat;
+  drawdown_gt_10pct: FrequencyStat;
+  evidence: "足" | "不足";
+}
+
+export interface PaybackStats {
+  origins: number;
+  events: number;
+  recovered: number;
+  unrecovered: number;
+  unrecovered_share: number | null;
+  median_days: number | null;
+  p75_days: number | null;
+  p90_days: number | null;
+  evidence: "足" | "不足";
+}
+
+export interface HistoryFrequencyReport {
+  code: string;
+  name: string;
+  status: "ok" | "refused";
+  refusal_reason: string | null;
+  evidence: "足" | "不足";
+  evidence_reason: string | null;
+  data_start: string | null;
+  data_end: string | null;
+  dropped_rows: number;
+  origins_6m: number;
+  origins_12m: number;
+  non_overlapping_blocks_12m: number;
+  positive_6m: FrequencyStat | null;
+  positive_12m: FrequencyStat | null;
+  drawdown_exceed_12m: Record<string, FrequencyStat>;
+  payback_5pct: PaybackStats | null;
+  yearly: HistoryFrequencyYearRow[];
+  disclosures: string[];
+}
+
+export async function getHistoryFrequencyReport(code: string): Promise<HistoryFrequencyReport> {
+  // 全程历史净值冷拉取 + 全量滚动统计可能较慢，给足超时，不用默认 30 秒。
+  return fetchJson<HistoryFrequencyReport>(
+    `/api/history-frequency/${encodeURIComponent(code.trim().toUpperCase())}`,
+    undefined,
+    120000
+  );
+}
+
+/** 白话结论句：只复述报告里的频率数字，不加任何对未来的判断。 */
+export function plainHistoryFrequencySummary(report: HistoryFrequencyReport): string {
+  if (report.status === "refused") {
+    return report.refusal_reason ?? "历史不足，拒绝出结论";
+  }
+  const p12 = report.positive_12m;
+  const dd10 = report.drawdown_exceed_12m["10"];
+  const payback = report.payback_5pct;
+  const parts: string[] = [];
+  if (p12 && p12.freq != null) {
+    parts.push(
+      `持有 12 个月后赚钱的起点占 ${(p12.freq * 100).toFixed(1)}%（${p12.count}/${p12.n} 个起点）`
+    );
+  }
+  if (dd10 && dd10.freq != null) {
+    parts.push(
+      `一年内跌超 10% 的起点占 ${(dd10.freq * 100).toFixed(1)}%（${dd10.count}/${dd10.n} 个起点）`
+    );
+  }
+  if (payback && payback.events > 0 && payback.unrecovered_share != null) {
+    parts.push(
+      `跌破 5% 后两年内没回本的起点占 ${(payback.unrecovered_share * 100).toFixed(1)}%`
+    );
+  }
+  let text =
+    parts.length > 0 ? `过去这段历史里，${parts.join("；")}。` : "历史起点太少，算不出频率。";
+  if (report.evidence === "不足") {
+    text += "但起点数不足，只能写证据不足，不能据此下结论。";
+  }
+  return text;
+}
