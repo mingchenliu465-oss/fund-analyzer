@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { BarChart3, PieChart, FileText, Home, Scale, Menu, X, Sparkles } from "lucide-react";
+import { BarChart3, PieChart, FileText, Home, Scale, Menu, X, Sparkles, History } from "lucide-react";
 import { useState } from "react";
 
 const navItems = [
@@ -13,6 +13,7 @@ const navItems = [
   { href: "/insights", label: "组合洞察", icon: Sparkles },
   { href: "/compare", label: "基金对比", icon: Scale },
   { href: "/review", label: "投资复盘", icon: FileText },
+  { href: "/history-frequency", label: "历史频率", icon: History },
 ];
 
 export function Nav() {
