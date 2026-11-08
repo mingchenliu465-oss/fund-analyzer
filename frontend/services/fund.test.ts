@@ -90,6 +90,12 @@ describe("plainHistoryFrequencySummary 只复述数字，不加对未来的判�
     expect(text).not.toContain("证据不足");
   });
 
+  it("先解释起点是什么，两个比例同批时明说同一批", () => {
+    const text = plainHistoryFrequencySummary(base);
+    expect(text).toContain("就在那天买入");
+    expect(text).toContain("同一批起点");
+  });
+
   it("证据不足时追加降级句", () => {
     const text = plainHistoryFrequencySummary({ ...base, evidence: "不足" as const });
     expect(text).toContain("只能写证据不足");
