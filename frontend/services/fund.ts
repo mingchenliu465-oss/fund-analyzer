@@ -883,7 +883,10 @@ export async function getHistoryFrequencyReport(code: string): Promise<HistoryFr
   );
 }
 
-/** 白话结论句：只复述报告里的频率数字，不加任何对未来的判断。 */
+/** 白话结论句：只复述报告里的频率数字，不加任何对未来的判断。
+ *  先用人话说清“起点＝过去某一天买入”，再给数字；
+ *  12 个月赚钱与跌超 10% 若数的是同一批起点（n 相同），明说“同一批”，
+ *  免得读者把两个比例当成两批人。 */
 export function plainHistoryFrequencySummary(report: HistoryFrequencyReport): string {
   if (report.status === "refused") {
     return report.refusal_reason ?? "历史不足，拒绝出结论";
@@ -891,24 +894,34 @@ export function plainHistoryFrequencySummary(report: HistoryFrequencyReport): st
   const p12 = report.positive_12m;
   const dd10 = report.drawdown_exceed_12m["10"];
   const payback = report.payback_5pct;
-  const parts: string[] = [];
-  if (p12 && p12.freq != null) {
+  const parts: string[] = [
+    "本页把过去每一个交易日都当成一次“就在那天买入”来数，这样的买入日叫一个起点",
+  ];
+  const sameBatch = p12?.freq != null && dd10?.freq != null && p12.n === dd10.n;
+  if (p12 && p12.freq != null && dd10 && dd10.freq != null && sameBatch) {
     parts.push(
-      `持有 12 个月后赚钱的起点占 ${(p12.freq * 100).toFixed(1)}%（${p12.count}/${p12.n} 个起点）`
+      `在能看满 12 个月的 ${p12.n} 个起点里，拿满一年后赚钱的占 ${(p12.freq * 100).toFixed(1)}%` +
+        `（${p12.count}/${p12.n} 个起点）；还是同一批起点，一年内跌超 10% 的占 ${(dd10.freq * 100).toFixed(1)}%` +
+        `（${dd10.count}/${dd10.n} 个起点），两个比例数的是同一批买入日`
     );
-  }
-  if (dd10 && dd10.freq != null) {
-    parts.push(
-      `一年内跌超 10% 的起点占 ${(dd10.freq * 100).toFixed(1)}%（${dd10.count}/${dd10.n} 个起点）`
-    );
+  } else {
+    if (p12 && p12.freq != null) {
+      parts.push(
+        `持有 12 个月后赚钱的起点占 ${(p12.freq * 100).toFixed(1)}%（${p12.count}/${p12.n} 个起点）`
+      );
+    }
+    if (dd10 && dd10.freq != null) {
+      parts.push(
+        `一年内跌超 10% 的起点占 ${(dd10.freq * 100).toFixed(1)}%（${dd10.count}/${dd10.n} 个起点）`
+      );
+    }
   }
   if (payback && payback.events > 0 && payback.unrecovered_share != null) {
     parts.push(
-      `跌破 5% 后两年内没回本的起点占 ${(payback.unrecovered_share * 100).toFixed(1)}%`
+      `再看跌下去的情况：跌破 5% 的起点里，有 ${(payback.unrecovered_share * 100).toFixed(1)}% 在两年内没回本`
     );
   }
-  let text =
-    parts.length > 0 ? `过去这段历史里，${parts.join("；")}。` : "历史起点太少，算不出频率。";
+  let text = parts.length > 1 ? `${parts.join("。")}。` : "历史起点太少，算不出频率。";
   if (report.evidence === "不足") {
     text += "但起点数不足，只能写证据不足，不能据此下结论。";
   }
