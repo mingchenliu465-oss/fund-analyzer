@@ -1,45 +1,37 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { motion } from "framer-motion";
-import {
-  AlertTriangle,
-  ArrowLeft,
-  ArrowRight,
-  Percent,
-  Search,
-  Star,
-  TrendingDown,
-  TrendingUp,
-  User,
-  Zap,
-} from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import {
   Area,
   AreaChart,
   CartesianGrid,
-  Cell,
   Legend,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-
-import { MetricCard } from "@/components/metric-card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { KLineChart } from "@/components/kline-chart";
 import { DrawdownChart } from "@/components/drawdown-chart";
 import { RiskIndicatorTable } from "@/components/risk-indicator-table";
 import { TopHoldingsTable } from "@/components/top-holdings-table";
 import { PeerComparison } from "@/components/peer-comparison";
+import {
+  DataState,
+  KeyValueList,
+  MetricStrip,
+  PlainConclusion,
+  ResearchSection,
+  SegmentedControl,
+  SourceNote,
+  UnderlineNav,
+  toneFor,
+} from "@/components/research-ui";
 import {
   HoldStructure,
   NavPeriod,
@@ -55,11 +47,6 @@ import {
   getReturnRanking,
   recordBrowsedFund,
 } from "@/services/fund";
-import { useFundSearch } from "@/hooks/use-fund-search";
-
-import { Users } from "lucide-react";
-
-// ── K 线周期与时间范围（标准基金看板：周期 × 时间 双维度）──
 
 const PERIODS: { key: NavPeriod; label: string }[] = [
   { key: "日K", label: "日K" },
@@ -68,7 +55,6 @@ const PERIODS: { key: NavPeriod; label: string }[] = [
 ];
 
 type ChartRange = "1M" | "3M" | "6M" | "1Y" | "3Y";
-
 const RANGES: { key: ChartRange; label: string }[] = [
   { key: "1M", label: "1月" },
   { key: "3M", label: "3月" },
@@ -81,25 +67,11 @@ export default function FundDetailPage() {
   const params = useParams();
   const rawId = params?.id;
   const code = typeof rawId === "string" ? rawId.toUpperCase() : "";
-
   const [period, setPeriod] = useState<NavPeriod>("日K");
   const [chartRange, setChartRange] = useState<ChartRange>("1Y");
-  const [query, setQuery] = useState("");
-  // Deep analysis uses several slower endpoints. Keep it opt-in so the core
-  // fund page becomes useful as soon as the detail request is ready.
   const [analysisEnabled, setAnalysisEnabled] = useState(false);
-  const { suggestions: fundSuggestions } = useFundSearch(query, 6);
-  const suggestions = fundSuggestions.map(({ code: suggestionCode, name }) => ({
-    code: suggestionCode,
-    name,
-  }));
 
-  // ── React Query: 基金详情（5 分钟缓存）──
-  const {
-    data: fund,
-    isLoading: fundLoading,
-    isError: fundError,
-  } = useQuery({
+  const { data: fund, isLoading: fundLoading, isError: fundError } = useQuery({
     queryKey: ["fundDetail", code],
     queryFn: () => getFundDetail(code),
     enabled: !!code,
@@ -107,12 +79,10 @@ export default function FundDetailPage() {
     retry: 0,
   });
 
-  // 查看基金详情后，记录到"最近浏览"（供首页面板展示）
   useEffect(() => {
     if (fund) recordBrowsedFund(fund);
   }, [fund]);
 
-  // ── React Query: K 线/净值走势数据（按 code + period 缓存，range 为纯视图状态）──
   const { data: klineData = [], isFetching: klineFetching, isError: klineError } = useQuery({
     queryKey: ["kline", code, period],
     queryFn: () => getFundKlineHistory(code, period),
@@ -122,8 +92,7 @@ export default function FundDetailPage() {
     placeholderData: keepPreviousData,
   });
 
-  // ── React Query: 回撤数据（按 code + period 缓存）──
-  const { data: drawdownData = [] } = useQuery({
+  const { data: drawdownData = [], isFetching: drawdownFetching } = useQuery({
     queryKey: ["drawdown", code, period],
     queryFn: () => getFundDrawdownHistory(code, period),
     enabled: analysisEnabled && !!code,
@@ -140,7 +109,6 @@ export default function FundDetailPage() {
     retry: 0,
   });
 
-  // ── React Query: 同类对比 ──
   const { data: peers = [] } = useQuery({
     queryKey: ["peers", code],
     queryFn: () => getPeerComparison(code),
@@ -149,7 +117,6 @@ export default function FundDetailPage() {
     retry: 0,
   });
 
-  // ── React Query: 收益排名 ──
   const { data: ranking = null } = useQuery({
     queryKey: ["ranking", code],
     queryFn: () => getReturnRanking(code),
@@ -158,700 +125,236 @@ export default function FundDetailPage() {
     retry: 0,
   });
 
-  // ── React Query: 持有人结构 ──
   const { data: holdStructure = null } = useQuery<HoldStructure | null>({
     queryKey: ["holdStructure"],
     queryFn: getHoldStructure,
     enabled: analysisEnabled && !!code,
-    staleTime: 2 * 60 * 60 * 1000, // 2 小时（季报数据）
+    staleTime: 2 * 60 * 60 * 1000,
     retry: 0,
   });
 
   if (!code) {
     return (
-      <div className="mx-auto max-w-7xl px-4 py-20 text-center sm:px-6">
-        <h1 className="text-2xl font-semibold">缺少基金代码</h1>
-        <p className="mt-2 text-muted-foreground">请在 URL 中输入基金代码，例如 /fund/000300。</p>
-        <Link href="/" className="mt-6 inline-block">
-          <Button className="h-12 rounded-2xl bg-foreground px-6 text-background hover:bg-foreground/90">
-            <ArrowLeft className="mr-2 h-4 w-4" /> 返回首页
-          </Button>
-        </Link>
+      <div className="page-container">
+        <DataState kind="error" title="缺少基金代码" description="请在地址中输入基金代码，例如 /fund/000300。" action={<Link href="/fund"><Button>返回基金列表</Button></Link>} />
       </div>
     );
   }
 
   if (!fund && (fundError || fund === null)) {
     return (
-      <div className="mx-auto max-w-7xl px-4 py-20 text-center sm:px-6">
-        <AlertTriangle className="mx-auto h-12 w-12 text-warning" />
-        <h1 className="mt-4 text-2xl font-semibold">未找到基金 {code}</h1>
-        <p className="mt-2 text-muted-foreground">请检查基金代码是否正确，或返回首页搜索。</p>
-        <Link href="/" className="mt-6 inline-block">
-          <Button className="h-12 rounded-2xl bg-foreground px-6 text-background hover:bg-foreground/90">
-            <ArrowLeft className="mr-2 h-4 w-4" /> 返回首页
-          </Button>
-        </Link>
+      <div className="page-container">
+        <DataState kind="error" title={`基金 ${code} 的详情暂时不可用`} description="接口未能返回基金资料，请稍后重试或返回列表重新搜索；未使用替代数据。" action={<Link href="/fund"><Button>返回基金列表</Button></Link>} />
       </div>
     );
   }
 
   if (!fund || fundLoading) {
-    return (
-      <div className="mx-auto max-w-7xl px-4 py-20 text-center text-muted-foreground sm:px-6">
-        加载中…
-      </div>
-    );
+    return <div className="page-container"><DataState kind="loading" title="正在加载基金详情" description="先读取最新净值和基本资料，历史图表随后加载。" /></div>;
   }
 
-  // 涨跌幅缺失时后端返回 null。绝不能只写 `>= 0`：null >= 0 在 JS 里为 true，
-  // 会渲染成"上涨箭头 + 绿色 +0.00%"，把"拿不到行情"伪装成真实的持平报价。
   const changePct = fund.changePct;
   const hasChange = changePct != null;
-  const isUp = hasChange && changePct >= 0;
-  // 数据源未提供基金经理任职天数时不显示，绝不用成立日期估算。
-  // 注意：后端返回的是 **null**（字段存在、值为 null），不是 undefined。
-  const managerDays = fund.managerDays;
   const latestDrawdown = drawdownData.length ? drawdownData[drawdownData.length - 1].drawdown : fund.metrics.maxDrawdown;
   const recoveryStatus = latestDrawdown >= -0.005 ? "已修复" : latestDrawdown > fund.metrics.maxDrawdown + 0.01 ? "正在修复中" : "回撤中";
-  const recoveryClass = recoveryStatus === "已修复" ? "text-positive" : "text-negative";
-  const diagnosis = fund.metrics.maxDrawdown <= -0.2
-    ? "历史波动较大，适合能承受明显回撤的长期投资者。"
+  const conclusion = fund.metrics.maxDrawdown <= -0.2
+    ? "历史最大回撤超过 20%，持有过程中出现过明显下跌。除了收益，还需要重点看回撤和波动。"
     : fund.metrics.maxDrawdown <= -0.1
-      ? "收益和波动较为均衡，建议结合持有期限观察。"
-      : "历史回撤相对温和，但仍需关注收益是否匹配预期。";
+      ? "历史最大回撤在 10%—20% 之间。收益需要与这段波动放在一起看，不能只看涨幅。"
+      : "历史最大回撤相对温和，但历史表现不代表未来，仍需结合收益和数据区间判断。";
+
+  const returnRows = [
+    { label: "日收益", value: fund.returns.daily, note: "最近一个净值观测周期" },
+    { label: "周收益", value: fund.returns.weekly, note: "近一周" },
+    { label: "月收益", value: fund.returns.monthly, note: "近一月" },
+    { label: "近一年收益", value: fund.returns.yearly, note: "近 12 个月" },
+  ];
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
-      <section className="mb-6 rounded-2xl border border-accent/20 bg-accent/5 p-5 sm:p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div><div className="flex items-center gap-2 text-sm font-semibold"><Zap className="h-4 w-4 text-accent" />基金诊断</div><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{diagnosis}</p></div>
-          <div className="grid grid-cols-2 gap-3 text-sm sm:min-w-[250px]"><div className="rounded-xl border border-border bg-background/70 p-3"><span className="block text-xs text-muted-foreground">近一年收益</span><strong className={fund.oneYearReturn == null ? "mt-1 block text-muted-foreground" : fund.oneYearReturn >= 0 ? "mt-1 block text-positive" : "mt-1 block text-negative"}>{formatPercent(fund.oneYearReturn)}</strong></div><div className="rounded-xl border border-border bg-background/70 p-3"><span className="block text-xs text-muted-foreground">最大回撤</span><strong className="mt-1 block text-negative">{formatPercent(fund.metrics.maxDrawdown)}</strong></div></div>
-        </div>
-        <p className="mt-4 border-t border-accent/10 pt-3 text-xs text-muted-foreground">根据历史数据生成，仅帮助理解，不构成买卖建议。</p>
-      </section>
-      {/* Header */}
-      <section className="mb-6">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
-        >
-          <Link
-            href="/"
-            className="mb-3 inline-flex items-center text-sm font-medium text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="mr-1 h-4 w-4" /> 返回首页
-          </Link>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{fund.name}</h1>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-                <Badge variant="default" className="font-medium">{fund.code}</Badge>
-                <span className="text-muted-foreground">{fund.type}</span>
-                <span className="text-muted-foreground">·</span>
-                <span className="text-muted-foreground">{fund.company}</span>
-                <span className="text-muted-foreground">·</span>
-                <Badge variant={getRiskBadgeVariant(fund.metrics.riskScore)}>
-                  风险 {fund.metrics.riskLevel ?? "暂无"}
-                </Badge>
-                <Badge variant="outline" className="inline-flex items-center gap-1">
-                  <User className="h-3 w-3" />
-                  {fund.manager}
-                </Badge>
-                <Badge variant="outline" className="inline-flex items-center gap-1">
-                  <Star className="h-3 w-3 fill-warning text-warning" />
-                  {fund.rating} 星
-                </Badge>
-                {fund.tags.map((tag) => (
-                  <Badge key={tag} variant="outline">
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-            <div className="flex items-center gap-4 text-right">
-              <div>
-                <div className="text-xs text-muted-foreground">最新净值</div>
-                <div className="text-2xl font-semibold tabular-nums">{formatCurrency(fund.nav, 4)}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">日涨跌幅</div>
-                <div
-                  className={`flex items-center justify-end gap-1 text-2xl font-semibold tabular-nums ${
-                    !hasChange
-                      ? "text-muted-foreground"
-                      : isUp
-                        ? "text-positive"
-                        : "text-negative"
-                  }`}
-                >
-                  {!hasChange ? null : isUp ? (
-                    <TrendingUp className="h-5 w-5" />
-                  ) : (
-                    <TrendingDown className="h-5 w-5" />
-                  )}
-                  {hasChange ? formatPercent(changePct * 0.01) : "—"}
-                </div>
-              </div>
-            </div>
-          </div>
-        </motion.div>
+    <div className="page-container">
+      <Link href="/fund" className="mb-5 inline-flex min-h-11 items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <ArrowLeft className="h-4 w-4" /> 返回基金列表
+      </Link>
 
-        {/* Inline search */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.05, ease: [0.23, 1, 0.32, 1] }}
-          className="relative mt-4 max-w-xl"
-        >
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="搜索基金代码 / 名称切换"
-              className="h-11 rounded-2xl border-border bg-background pl-11 text-base shadow-sm placeholder:text-muted-foreground/60"
-            />
-          </div>
-          {suggestions.length > 0 && (
-            <div className="absolute z-20 mt-2 w-full rounded-2xl border border-border bg-background p-2 shadow-lg">
-              {suggestions.map((s) => (
-                <Link
-                  key={s.code}
-                  href={`/fund/${s.code}`}
-                  onClick={() => {
-                    setQuery("");
-                  }}
-                  className="flex items-center justify-between rounded-xl px-3 py-2.5 text-sm hover:bg-muted"
-                >
-                  <span className="font-medium">{s.name}</span>
-                  <span className="text-muted-foreground">{s.code}</span>
-                </Link>
-              ))}
-            </div>
-          )}
-        </motion.div>
-      </section>
-
-      {/* Meta info */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.08, ease: [0.23, 1, 0.32, 1] }}
-        className="mb-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4"
-      >
-        <MetaItem label="基金规模" value={fund.size} />
-        <MetaItem label="成立时间" value={fund.inceptionDate} />
-        {/* 投资风格当前一律为 null（无真实持仓风格数据）-> 显示"—"，不猜。 */}
-        <MetaItem label="投资风格" value={fund.investmentStyle ?? "—"} />
-        <MetaItem
-          label="基金经理"
-          value={
-            // 原代码写的是 `managerDays !== undefined`，而后端给的是 null ——
-            // 于是 null 走进 toLocaleString() 分支，整个页面渲染中断（Runtime Error）。
-            typeof managerDays === "number"
-              ? `${fund.manager} · 从业 ${managerDays.toLocaleString()} 天`
-              : fund.manager
-          }
-        />
-      </motion.div>
-
-      {/* Return metric cards */}
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <MetricCard
-          title="近一年收益"
-          value={formatPercent(fund.returns.yearly)}
-          // 历史不足一年时 yearly 为 null。绝不能 `>= 0`：null >= 0 为 true，
-          // 会显示成上涨，并标注"跑赢基准"—— 一个从未计算过的基准比较。
-          trend={fund.returns.yearly == null ? "neutral" : fund.returns.yearly >= 0 ? "up" : "down"}
-          trendValue={fund.returns.yearly == null ? "历史不足一年" : fund.returns.yearly >= 0 ? undefined : "近一年为负"}
-          subtitle="近12个月"
-          icon={TrendingUp}
-          delay={0.1}
-        />
-        <div className="rounded-2xl border border-border bg-background p-4">
-          <div className="text-xs text-muted-foreground">回撤修复</div>
-          <div className={`mt-1 text-xl font-semibold ${recoveryClass}`}>{recoveryStatus}</div>
-          <p className="mt-1 text-xs text-muted-foreground">根据最新净值相对历史高点判断</p>
-        </div>
-        <MetricCard
-          title="最大回撤"
-          value={formatPercent(fund.metrics.maxDrawdown)}
-          trend="down"
-          trendValue="历史极端情况"
-          subtitle="成立以来"
-          icon={TrendingDown}
-          delay={0.15}
-        />
-        <MetricCard
-          title="夏普比率"
-          value={formatRatio(fund.metrics.sharpe)}
-          trend="neutral"
-          subtitle="风险调整后收益"
-          icon={Zap}
-          delay={0.2}
-        />
-        <MetricCard
-          title="波动率"
-          value={formatPercent(fund.metrics.volatility)}
-          trend="neutral"
-          subtitle="年度波动幅度"
-          icon={Percent}
-          delay={0.25}
-        />
-      </div>
-
-      {/* Return breakdown + ranking */}
-      <div className="mb-5 grid gap-4 lg:grid-cols-4">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.28, ease: [0.23, 1, 0.32, 1] }}
-          className="grid grid-cols-3 gap-3 lg:col-span-3"
-        >
-          {[
-            { label: "日收益", value: fund.returns.daily },
-            { label: "周收益", value: fund.returns.weekly },
-            { label: "月收益", value: fund.returns.monthly },
-          ].map((item) => (
-            <div
-              key={item.label}
-              className="rounded-2xl border border-border bg-background p-4"
-            >
-              <div className="text-xs text-muted-foreground">{item.label}</div>
-              <div
-                className={`mt-1 text-xl font-semibold tabular-nums ${
-                  item.value == null
-                    ? "text-muted-foreground"
-                    : item.value >= 0
-                      ? "text-positive"
-                      : "text-negative"
-                }`}
-              >
-                {/* 历史不足时后端返回 null。旧代码直接 item.value >= 0，
-                    null 会被强制转成 0 并渲染成绿色的 "+0.00%" —— 把"算不出来"
-                    伪装成一个真实的持平收益。 */}
-                {formatPercent(item.value)}
-              </div>
-            </div>
-          ))}
-        </motion.div>
-
-        {ranking && ranking.rank > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.3, ease: [0.23, 1, 0.32, 1] }}
-            className="flex flex-col justify-center rounded-2xl border border-border bg-background p-4"
-          >
-            <div className="text-xs text-muted-foreground">收益排名</div>
-            <div className="mt-1 text-2xl font-semibold tabular-nums">
-              #{ranking.rank}
-              <span className="text-sm font-normal text-muted-foreground">
-                {" "}
-                / {ranking.total}
-              </span>
-            </div>
-            <div className="text-xs text-muted-foreground">前 {ranking.percentile ?? '--'}%（近一年收益）</div>
-          </motion.div>
-        )}
-      </div>
-
-      {/* K-line chart */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.32, ease: [0.23, 1, 0.32, 1] }}
-        className="mb-5 rounded-2xl border border-border bg-background p-4 sm:p-5"
-      >
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <header className="border-t border-foreground pt-5">
+        <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
           <div>
-            <h3 className="text-base font-semibold tracking-tight">
-              {fund.type === "ETF" ? "K线走势" : "净值走势"}
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              {fund.type === "ETF"
-                ? "红涨绿跌 · OHLC 蜡烛图 · 实时行情"
-                : "净值折线 · 日/周/月度净值点 · T-1净值，交易日盘后更新"}
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{fund.name}</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {fund.code} · {fund.type} · {fund.company} · 基金经理 {fund.manager || "—"}
             </p>
+            {fund.tags.length > 0 && <p className="mt-1 text-xs text-muted-foreground">{fund.tags.join(" / ")}</p>}
           </div>
-          <div className="flex flex-col gap-2">
-            {/* 周期 */}
-            <div className="flex flex-wrap gap-1 rounded-xl border border-border bg-muted/40 p-1">
-              {PERIODS.map((p) => (
-                <button
-                  key={p.key}
-                  onClick={() => setPeriod(p.key)}
-                  disabled={klineFetching}
-                  className={`rounded-lg px-3 py-1 text-xs font-medium transition-colors ${
-                    period === p.key
-                      ? "bg-background shadow-sm text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
+          <div className="flex items-end gap-6 md:text-right">
+            <div>
+              <span className="block text-xs text-muted-foreground">最新净值</span>
+              <strong className="block text-4xl font-semibold leading-tight tabular-nums">{formatCurrency(fund.nav, 4)}</strong>
             </div>
-            {/* 时间范围 */}
-            <div className="flex flex-wrap gap-1 rounded-xl border border-border bg-muted/40 p-1">
-              {RANGES.map((r) => (
-                <button
-                  key={r.key}
-                  onClick={() => setChartRange(r.key)}
-                  disabled={klineFetching}
-                  className={`rounded-lg px-3 py-1 text-xs font-medium transition-colors ${
-                    chartRange === r.key
-                      ? "bg-background shadow-sm text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {r.label}
-                </button>
-              ))}
+            <div>
+              <span className="block text-xs text-muted-foreground">日涨跌</span>
+              <strong className={`block text-2xl font-semibold tabular-nums ${!hasChange ? "text-muted-foreground" : changePct >= 0 ? "text-positive" : "text-negative"}`}>
+                {hasChange ? formatPercent(changePct * 0.01) : "—"}
+              </strong>
             </div>
           </div>
         </div>
+        <SourceNote>
+          数据日期：{fund.navDate ?? "未提供"} · 数据状态：{fund.navStatus ?? "未知"} · 来源：akshare 公开接口。场外基金通常为 T-1 净值。
+        </SourceNote>
+      </header>
 
-        <div className="h-[320px] w-full">
-          {klineData.length > 0 ? (
-            <KLineChart
-              key={`${code}-${period}`}
-              data={klineData}
-              fundType={fund.type}
-              code={code}
-              period={period}
-              chartRange={chartRange}
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              {klineError ? "数据暂时不可用，请重新加载。" : "暂无真实数据。"}
-            </div>
-          )}
+      <div className="mt-5">
+        <PlainConclusion>{conclusion}</PlainConclusion>
+      </div>
+
+      <MetricStrip items={[
+        { label: "近一年收益", value: formatPercent(fund.returns.yearly), note: "近 12 个月", tone: toneFor(fund.returns.yearly) },
+        { label: "最大回撤", value: formatPercent(fund.metrics.maxDrawdown), note: "历史极端情况", tone: "neutral" },
+        { label: "年化波动率", value: formatPercent(fund.metrics.volatility), note: "按历史收益计算" },
+        { label: "夏普比率", value: formatRatio(fund.metrics.sharpe), note: "风险调整后收益" },
+        { label: "基金规模", value: fund.size || "—", note: fund.inceptionDate ? `成立于 ${fund.inceptionDate}` : "成立日期未提供" },
+      ]} />
+
+      <UnderlineNav label="基金详情页内导航" items={[
+        { href: "#overview", label: "概览" },
+        { href: "#performance", label: "走势与回撤" },
+        { href: "#holdings", label: "持仓与同类" },
+        { href: "#disclosure", label: "数据说明" },
+      ]} />
+
+      <ResearchSection id="overview" title="基金概览" description="先解释指标含义，再看数值；没有来源的数据不做估算。">
+        <div className="grid gap-x-12 lg:grid-cols-2">
+          <KeyValueList items={[
+            { label: "基金类型", value: fund.type || "—" },
+            { label: "成立时间", value: fund.inceptionDate || "—" },
+            { label: "基金经理", value: typeof fund.managerDays === "number" ? `${fund.manager} · 从业 ${fund.managerDays.toLocaleString()} 天` : fund.manager || "—", note: "任职天数未提供时不按成立日期估算" },
+            { label: "投资风格", value: fund.investmentStyle ?? "—" },
+            { label: "基金评级", value: fund.rating == null ? "—" : `${fund.rating} 星` },
+            { label: "回撤修复", value: recoveryStatus, note: "根据最新净值相对历史高点判断" },
+          ]} />
+          <div>
+            <h3 className="mb-2 text-sm font-semibold">多期收益</h3>
+            <KeyValueList items={returnRows.map((item) => ({
+              label: item.label,
+              note: item.note,
+              value: <span className={item.value == null ? "text-muted-foreground" : item.value >= 0 ? "text-positive" : "text-negative"}>{formatPercent(item.value)}</span>,
+            }))} />
+          </div>
         </div>
-        <p className="mt-2 text-[11px] text-muted-foreground">
-          {fund.type === "ETF"
-            ? "ETF 为场内实时行情（含开/高/低/收与成交量），盘中实时更新。"
-            : "场外基金每个交易日仅一个单位净值，此处展示净值走势（非 K 线）；净值为 T-1，交易日盘后更新。数据源不可用时此处不会显示任何替代数据。"}
-        </p>
-      </motion.div>
-
-      {/* Drawdown + Risk indicators */}
-      <div className="mb-5 grid gap-4 lg:grid-cols-2">
-        {analysisEnabled ? (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.35, ease: [0.23, 1, 0.32, 1] }}
-            className="rounded-2xl border border-border bg-background p-4 sm:p-5"
-          >
-            <div className="mb-3">
-              <h3 className="text-base font-semibold tracking-tight">历史最大回撤</h3>
-              <p className="text-xs text-muted-foreground">基于选定周期计算的滚动回撤</p>
-            </div>
-            <div className="h-[260px]">
-              {drawdownData.length > 0 ? (
-                <DrawdownChart data={drawdownData} />
-              ) : (
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                  暂无数据
-                </div>
-              )}
-            </div>
-          </motion.div>
-        ) : (
-          <div className="flex min-h-[340px] flex-col justify-center rounded-2xl border border-dashed border-border bg-muted/20 p-6">
-            <div className="text-sm font-semibold">深度分析</div>
-            <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-              回撤曲线、同类对比和持有人结构需要额外读取数据。核心行情已经加载，点击后再加载这些分析。
-            </p>
-            <Button
-              onClick={() => setAnalysisEnabled(true)}
-              className="mt-5 w-fit rounded-xl bg-foreground text-background hover:bg-foreground/90"
-            >
-              加载深度分析 <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
+        {ranking && ranking.rank > 0 && (
+          <div className="mt-6 border-t border-border pt-4">
+            <span className="text-xs text-muted-foreground">近一年同类收益排名</span>
+            <div className="mt-1 text-2xl font-semibold tabular-nums">{ranking.rank} <span className="text-sm text-muted-foreground">｜ {ranking.total}</span></div>
+            <p className="text-xs text-muted-foreground">位于前 {ranking.percentile ?? "—"}%；名次越小，历史区间收益排名越靠前。</p>
           </div>
         )}
+      </ResearchSection>
 
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.38, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-2xl border border-border bg-background p-4 sm:p-5"
-        >
-          <div className="mb-3">
-            <h3 className="text-base font-semibold tracking-tight">风险指标</h3>
-            <p className="text-xs text-muted-foreground">综合评估基金风险收益特征</p>
-          </div>
-          <RiskIndicatorTable metrics={fund.metrics} />
-          {analysisEnabled && statisticsAudit && (
-            <div className="mt-4 border-t border-border pt-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h4 className="text-sm font-semibold">数据质量与统计区间</h4>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    基于累计净值；极端收益只提示复核，不会修改历史数据。
-                  </p>
-                </div>
-                <Badge variant={statisticsAudit.status === "review" ? "warning" : statisticsAudit.status === "available" ? "positive" : "outline"}>
-                  {statisticsAudit.status === "review" ? "需要复核" : statisticsAudit.status === "available" ? "数据可用" : "数据不足"}
-                </Badge>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
-                <div className="rounded-lg border border-border p-2">
-                  <span className="block text-muted-foreground">净值观测</span>
-                  <strong className="mt-1 block tabular-nums">{statisticsAudit.observations}</strong>
-                </div>
-                <div className="rounded-lg border border-border p-2">
-                  <span className="block text-muted-foreground">极端日收益</span>
-                  <strong className="mt-1 block tabular-nums">{statisticsAudit.outliers.length}</strong>
-                </div>
-                <div className="rounded-lg border border-border p-2">
-                  <span className="block text-muted-foreground">重复日期</span>
-                  <strong className="mt-1 block tabular-nums">{statisticsAudit.duplicateDates}</strong>
-                </div>
-              </div>
-              {statisticsAudit.volatilityCi ? (
-                <p className="mt-3 text-xs text-muted-foreground">
-                  年化波动率 95% 区间：{formatPercent(statisticsAudit.volatilityCi.lower)} ～ {formatPercent(statisticsAudit.volatilityCi.upper)}
-                </p>
-              ) : (
-                <p className="mt-3 text-xs text-muted-foreground">有效日收益不足，暂无法估计波动率区间。</p>
-              )}
-            </div>
+      <ResearchSection id="performance" title={fund.type === "ETF" ? "K 线走势" : "净值走势"} description={fund.type === "ETF" ? "红涨绿跌 · OHLC 蜡烛图 · 成交量与均线" : "净值折线 · 日/周/月度净值点 · 交易日盘后更新"}>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-between">
+          <SegmentedControl label="K 线周期" value={period} onChange={setPeriod} disabled={klineFetching} items={PERIODS.map((item) => ({ value: item.key, label: item.label }))} />
+          <SegmentedControl label="图表时间范围" value={chartRange} onChange={setChartRange} disabled={klineFetching} items={RANGES.map((item) => ({ value: item.key, label: item.label }))} />
+        </div>
+        <div className="chart-frame">
+          {klineData.length > 0 ? (
+            <KLineChart key={`${code}-${period}`} data={klineData} fundType={fund.type} code={code} period={period} chartRange={chartRange} />
+          ) : (
+            <DataState kind={klineError ? "error" : "loading"} title={klineError ? "走势数据暂时不可用" : "正在读取历史走势"} description={klineError ? "未使用替代数据，请稍后重试。" : undefined} />
           )}
-        </motion.div>
-      </div>
+        </div>
+        <SourceNote>
+          {fund.type === "ETF"
+            ? "ETF 为场内行情（含开/高/低/收与成交量），盘中更新；周 K、月 K 由日线聚合。"
+            : "场外基金每个交易日仅一个单位净值，此处展示净值走势（非 K 线）；净值为 T-1，交易日盘后更新。数据源不可用时不会显示替代数据。"}
+        </SourceNote>
+      </ResearchSection>
 
-      {/* Sector + Holdings */}
-      <div className="mb-5 grid gap-4 lg:grid-cols-2">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.41, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-2xl border border-border bg-background p-4 sm:p-5"
-        >
-          <div className="mb-3">
-            <h3 className="text-base font-semibold tracking-tight">行业分布</h3>
-            <p className="text-xs text-muted-foreground">按行业/资产类别划分的持仓占比</p>
-          </div>
-          <div className="h-[240px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={fund.sectors}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={55}
-                  outerRadius={90}
-                  paddingAngle={2}
-                  dataKey="weight"
-                  strokeWidth={0}
-                >
-                  {fund.sectors.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--background)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "12px",
-                    boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
-                  }}
-                  itemStyle={{ color: "var(--foreground)", fontSize: 13 }}
-                  formatter={(value, name) => [`${value}%`, name]}
-                />
-                <Legend
-                  verticalAlign="bottom"
-                  height={36}
-                  iconType="circle"
-                  formatter={(value: string) => (
-                    <span className="text-xs text-muted-foreground">{value}</span>
-                  )}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            {fund.sectors.map((item, index) => (
-              <div
-                key={`${item.name}-${index}`}
-                className="flex items-center justify-between rounded-lg border border-border p-2"
-              >
-                <div className="flex items-center gap-2">
-                  <span
-                    className="h-2 w-2 rounded-full"
-                    style={{ backgroundColor: item.color }}
-                  />
-                  <span className="text-xs">{item.name}</span>
+      <ResearchSection title="风险指标" description="最大回撤看极端下跌，波动率看日常波动，夏普比率看风险调整后收益。">
+        <RiskIndicatorTable metrics={fund.metrics} />
+      </ResearchSection>
+
+      <ResearchSection
+        title="历史回撤与数据质量"
+        description="深度分析需要额外读取回撤、统计和同类数据，仍沿用现有接口。"
+        action={!analysisEnabled ? <Button onClick={() => setAnalysisEnabled(true)}>加载深度分析 <ArrowRight className="h-4 w-4" /></Button> : undefined}
+      >
+        {!analysisEnabled ? (
+          <DataState kind="empty" title="核心行情已加载" description="点击“加载深度分析”后读取回撤曲线、同类对比和持有人结构。" />
+        ) : (
+          <>
+            <div className="chart-frame h-[260px]">
+              {drawdownData.length > 0 ? <DrawdownChart data={drawdownData} /> : <DataState kind="loading" title={drawdownFetching ? "正在计算历史回撤" : "暂无回撤数据"} />}
+            </div>
+            <SourceNote>回撤表示从历史高点下跌的百分比，越接近 0 表示越接近此前高点。</SourceNote>
+            {statisticsAudit && (
+              <div className="mt-6 grid gap-x-12 lg:grid-cols-2">
+                <KeyValueList items={[
+                  { label: "数据状态", value: statisticsAudit.status === "review" ? "需要复核" : statisticsAudit.status === "available" ? "数据可用" : "数据不足" },
+                  { label: "净值观测", value: statisticsAudit.observations },
+                  { label: "有效日收益", value: statisticsAudit.validReturns },
+                  { label: "极端日收益", value: statisticsAudit.outliers.length },
+                  { label: "重复日期", value: statisticsAudit.duplicateDates },
+                  { label: "统计区间", value: `${statisticsAudit.dataStart ?? "—"} 至 ${statisticsAudit.dataEnd ?? "—"}` },
+                ]} />
+                <div className="disclosure mt-5 lg:mt-0">
+                  <p>基于累计净值；极端收益只提示复核，不会修改历史数据。</p>
+                  <p>{statisticsAudit.volatilityCi ? `年化波动率 95% 区间：${formatPercent(statisticsAudit.volatilityCi.lower)} ～ ${formatPercent(statisticsAudit.volatilityCi.upper)}` : "有效日收益不足，暂无法估计波动率区间。"}</p>
+                  {statisticsAudit.notes.map((note) => <p key={note}>{note}</p>)}
                 </div>
-                <span className="text-xs font-medium tabular-nums">{item.weight}%</span>
               </div>
-            ))}
-          </div>
-        </motion.div>
+            )}
+          </>
+        )}
+      </ResearchSection>
 
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.44, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-2xl border border-border bg-background p-4 sm:p-5"
-        >
-          <div className="mb-3">
-            <h3 className="text-base font-semibold tracking-tight">重仓方向</h3>
-            <p className="text-xs text-muted-foreground">前十大持仓 / 股票、债券及基金资产</p>
+      <ResearchSection id="holdings" title="行业与资产配置" description={`按行业/资产类别划分的披露持仓占比${fund.sectorsAsOf ? `；截至 ${fund.sectorsAsOf}` : ""}。未披露部分不补成“其他”。`}>
+        {fund.sectors.length > 0 ? fund.sectors.map((item) => (
+          <div className="allocation-row" key={item.name}>
+            <span>{item.name}</span>
+            <div className="allocation-track" aria-hidden="true"><div className="allocation-fill" style={{ width: `${Math.min(100, item.weight)}%` }} /></div>
+            <span className="numeric font-semibold">{item.weight}%</span>
           </div>
-          <TopHoldingsTable holdings={fund.topHoldings} />
-        </motion.div>
-      </div>
+        )) : <DataState kind="empty" title="暂无行业分布数据" description="数据源未提供时不生成配置比例。" />}
+      </ResearchSection>
 
-      {/* Peer comparison */}
+      <ResearchSection title="重仓方向" description={`前十大持仓 / 股票、债券及基金资产${fund.holdingsAsOf ? `；截至 ${fund.holdingsAsOf}` : ""}。`}>
+        <TopHoldingsTable holdings={fund.topHoldings} />
+      </ResearchSection>
+
       {analysisEnabled && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.47, ease: [0.23, 1, 0.32, 1] }}
-          className="mb-5 rounded-2xl border border-border bg-background p-4 sm:p-5"
-        >
-          <div className="mb-3">
-            <h3 className="text-base font-semibold tracking-tight">同类基金对比</h3>
-            <p className="text-xs text-muted-foreground">与相同类型基金的近一年收益、风险指标对比</p>
-          </div>
+        <ResearchSection title="同类基金对比" description="与相同类型基金比较近一年收益、波动率与夏普比率。">
           <PeerComparison data={peers} targetCode={fund.code} />
-        </motion.div>
+        </ResearchSection>
       )}
 
-      {/* Hold Structure (全市场机构/个人持仓趋势) */}
       {holdStructure && holdStructure.points.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.49, ease: [0.23, 1, 0.32, 1] }}
-          className="mb-5 rounded-2xl border border-border bg-background p-4 sm:p-5"
-        >
-          <div className="mb-3">
-            <div className="flex items-center gap-2">
-              <Users className="h-4 w-4 text-muted-foreground" />
-              <h3 className="text-base font-semibold tracking-tight">持有人结构</h3>
-            </div>
-            <p className="text-xs text-muted-foreground">{holdStructure.note}</p>
-          </div>
-          <div className="h-[240px] w-full">
+        <ResearchSection title="持有人结构" description={holdStructure.note}>
+          <div className="chart-frame h-[260px]">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart
-                data={holdStructure.points.map((p) => ({
-                  date: p.date.slice(0, 7),
-                  "机构持有": p.institutionPct,
-                  "个人持有": p.individualPct,
-                  "内部持有": p.internalPct,
-                }))}
-                margin={{ top: 8, right: 8, bottom: 0, left: -16 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-                <XAxis
-                  dataKey="date"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
-                  dy={8}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
-                  domain={[0, 100]}
-                  tickFormatter={(v) => `${v}%`}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--background)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "12px",
-                    boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
-                  }}
-                  itemStyle={{ fontSize: 13 }}
-                  formatter={(value) => [`${Number(value).toFixed(1)}%`, undefined]}
-                />
-                <Legend
-                  verticalAlign="top"
-                  height={30}
-                  iconType="circle"
-                  formatter={(value: string) => (
-                    <span className="text-xs text-muted-foreground">{value}</span>
-                  )}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="机构持有"
-                  stroke="#0071e3"
-                  fill="#0071e3"
-                  fillOpacity={0.08}
-                  strokeWidth={2}
-                  dot={false}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="个人持有"
-                  stroke="#ff9500"
-                  fill="#ff9500"
-                  fillOpacity={0.08}
-                  strokeWidth={2}
-                  dot={false}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="内部持有"
-                  stroke="#af52de"
-                  fill="#af52de"
-                  fillOpacity={0.06}
-                  strokeWidth={2}
-                  dot={false}
-                />
+              <AreaChart data={holdStructure.points.map((point) => ({ date: point.date.slice(0, 7), 机构持有: point.institutionPct, 个人持有: point.individualPct, 内部持有: point.internalPct }))} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--chart-grid)" />
+                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} dy={8} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
+                <Tooltip contentStyle={{ background: "var(--background)", border: "1px solid var(--border)", borderRadius: 6 }} formatter={(value) => [`${Number(value).toFixed(1)}%`, undefined]} />
+                <Legend verticalAlign="top" height={30} iconType="plainline" />
+                <Area type="monotone" dataKey="机构持有" stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.08} strokeWidth={2} dot={false} />
+                <Area type="monotone" dataKey="个人持有" stroke="#6b7280" fill="#6b7280" fillOpacity={0.05} strokeWidth={2} dot={false} />
+                <Area type="monotone" dataKey="内部持有" stroke="#9ca3af" fill="#9ca3af" fillOpacity={0.04} strokeWidth={2} dot={false} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
-        </motion.div>
+        </ResearchSection>
       )}
 
-      {/* CTA */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.5, ease: [0.23, 1, 0.32, 1] }}
-        className="flex flex-col items-start justify-between gap-4 rounded-2xl border border-border bg-muted/40 p-4 sm:flex-row sm:items-center sm:p-5"
-      >
-        <div>
-          <h4 className="text-base font-semibold">想对比多只基金？</h4>
-          <p className="text-xs text-muted-foreground">将 {fund.name} 加入对比，看看它在同类中的表现。</p>
+      <ResearchSection id="disclosure" title="数据说明与披露" description="保留数据口径、更新时间与使用边界。">
+        <div className="disclosure">
+          {fund.description && <p>{fund.description}</p>}
+          <p>基金资料、净值、行情与持仓来自 akshare 公开接口。净值日期为 {fund.navDate ?? "未提供"}；持仓与行业日期分别见各分区标注。</p>
+          <p>收益、回撤、波动率和夏普比率均按现有后端接口返回口径展示；缺失数据显示为“—”，不以 0 或示例数据代替。</p>
+          <p>根据历史数据生成，仅帮助理解，不构成买卖建议。历史表现不代表未来结果。</p>
         </div>
-        <Link href="/compare">
-          <Button className="h-10 rounded-xl bg-foreground px-5 text-sm font-medium text-background hover:bg-foreground/90">
-            去对比
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
-        </Link>
-      </motion.div>
+        <Link href="/compare" className="text-link mt-5 inline-flex min-h-11 items-center gap-1">将 {fund.name} 加入基金对比 <ArrowRight className="h-4 w-4" /></Link>
+      </ResearchSection>
     </div>
   );
-}
-
-function MetaItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border bg-background p-3">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-0.5 text-sm font-medium">{value}</div>
-    </div>
-  );
-}
-
-function getRiskBadgeVariant(score: number | null): "positive" | "warning" | "negative" | "default" {
-  // 没有真实评分时使用中性样式：绝不把 null 当成 0（那会显示成"风险最低"）。
-  if (score == null || isNaN(score) || score < 0) return "default";
-  if (score < 30) return "positive";
-  if (score < 60) return "warning";
-  if (score < 80) return "default";
-  return "negative";
 }
