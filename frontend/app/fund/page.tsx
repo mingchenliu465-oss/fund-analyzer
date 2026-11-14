@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { BarChart3, RotateCcw, Scale, Search, TrendingDown, TrendingUp } from "lucide-react";
+import { BarChart3, RotateCcw, Scale, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/page-header";
+import { SignedChange } from "@/components/signed-change";
 import { FundSummary, formatCurrency, formatPercent, getAllFunds } from "@/services/fund";
 
 export default function FundListPage() {
@@ -43,17 +45,15 @@ export default function FundListPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
-      {/* Header */}
-      <section className="mb-5">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
-        >
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">基金列表</h1>
-          <p className="mt-1 text-sm text-muted-foreground">全部基金一览，支持按名称 / 代码筛选</p>
-        </motion.div>
-      </section>
+      {/* Header：标题与说明 + 阅读指引（全站统一结构） */}
+      <PageHeader
+        title="基金列表"
+        description="全部基金一览，支持按名称 / 代码筛选"
+        guide={[
+          "净值保留四位小数；日涨跌、近一年收益保留两位小数，红色为涨、绿色为跌",
+          "点击基金名称进入详情页，可查看走势、回撤、持仓与同类对比",
+        ]}
+      />
 
       {/* Search */}
       <motion.div
@@ -86,7 +86,7 @@ export default function FundListPage() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.1, ease: [0.23, 1, 0.32, 1] }}
-        className="rounded-2xl border border-border bg-background p-2"
+        className="rounded-card border border-border bg-background p-2"
       >
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -122,37 +122,17 @@ export default function FundListPage() {
                   <td className="px-3 py-3 text-right tabular-nums">
                     {formatCurrency(fund.nav, 4)}
                   </td>
-                  <td
-                    className={`px-3 py-3 text-right font-medium tabular-nums ${
-                      fund.changePct == null
-                        ? "text-muted-foreground"
-                        : fund.changePct >= 0
-                          ? "text-positive"
-                          : "text-negative"
-                    }`}
-                  >
-                    {/* 涨跌幅缺失时后端返回 null。不能只写 `>= 0`：null >= 0 为 true，
-                        会显示成上涨箭头 + 绿色 "+0.00%"。 */}
-                    {fund.changePct == null ? (
-                      <span className="text-muted-foreground">—</span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1">
-                        {fund.changePct >= 0 ? (
-                          <TrendingUp className="h-3 w-3" />
-                        ) : (
-                          <TrendingDown className="h-3 w-3" />
-                        )}
-                        {formatPercent(fund.changePct * 0.01)}
-                      </span>
-                    )}
+                  {/* 日涨跌统一用 SignedChange：红涨绿跌、缺失显示「—」 */}
+                  <td className="px-3 py-3 text-right tabular-nums">
+                    <SignedChange value={fund.changePct} />
                   </td>
                   <td
                     className={`px-3 py-3 text-right font-medium tabular-nums ${
                       fund.oneYearReturn == null
                         ? "text-muted-foreground"
                         : fund.oneYearReturn >= 0
-                          ? "text-positive"
-                          : "text-negative"
+                          ? "text-rise"
+                          : "text-fall"
                     }`}
                   >
                     {formatPercent(fund.oneYearReturn)}
@@ -199,6 +179,11 @@ export default function FundListPage() {
           </table>
         </div>
       </motion.div>
+
+      {/* 披露 */}
+      <footer className="mt-6 text-xs leading-relaxed text-muted-foreground">
+        列表数据来自 akshare 公开接口，仅供参考，不构成投资建议。热度等指标在数据源未提供时显示「—」。
+      </footer>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
+  BookOpen,
   Percent,
   Search,
   Star,
@@ -40,6 +41,12 @@ import { DrawdownChart } from "@/components/drawdown-chart";
 import { RiskIndicatorTable } from "@/components/risk-indicator-table";
 import { TopHoldingsTable } from "@/components/top-holdings-table";
 import { PeerComparison } from "@/components/peer-comparison";
+import { ReturnStat, StatItem } from "@/components/stat-item";
+import {
+  CHART_SERIES,
+  RECHARTS_TICK_PROPS,
+  RECHARTS_TOOLTIP_STYLE,
+} from "@/lib/chart-theme";
 import {
   HoldStructure,
   NavPeriod,
@@ -223,14 +230,7 @@ export default function FundDetailPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
-      <section className="mb-6 rounded-2xl border border-accent/20 bg-accent/5 p-5 sm:p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div><div className="flex items-center gap-2 text-sm font-semibold"><Zap className="h-4 w-4 text-accent" />基金诊断</div><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{diagnosis}</p></div>
-          <div className="grid grid-cols-2 gap-3 text-sm sm:min-w-[250px]"><div className="rounded-xl border border-border bg-background/70 p-3"><span className="block text-xs text-muted-foreground">近一年收益</span><strong className={fund.oneYearReturn == null ? "mt-1 block text-muted-foreground" : fund.oneYearReturn >= 0 ? "mt-1 block text-positive" : "mt-1 block text-negative"}>{formatPercent(fund.oneYearReturn)}</strong></div><div className="rounded-xl border border-border bg-background/70 p-3"><span className="block text-xs text-muted-foreground">最大回撤</span><strong className="mt-1 block text-negative">{formatPercent(fund.metrics.maxDrawdown)}</strong></div></div>
-        </div>
-        <p className="mt-4 border-t border-accent/10 pt-3 text-xs text-muted-foreground">根据历史数据生成，仅帮助理解，不构成买卖建议。</p>
-      </section>
-      {/* Header */}
+      {/* Header（页面结构约定：标题 → 阅读指引 → 白话结论 → 数据主体 → 披露） */}
       <section className="mb-6">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -282,8 +282,8 @@ export default function FundDetailPage() {
                     !hasChange
                       ? "text-muted-foreground"
                       : isUp
-                        ? "text-positive"
-                        : "text-negative"
+                        ? "text-rise"
+                        : "text-fall"
                   }`}
                 >
                   {!hasChange ? null : isUp ? (
@@ -315,7 +315,7 @@ export default function FundDetailPage() {
             />
           </div>
           {suggestions.length > 0 && (
-            <div className="absolute z-20 mt-2 w-full rounded-2xl border border-border bg-background p-2 shadow-lg">
+            <div className="absolute z-20 mt-2 w-full rounded-card border border-border bg-background p-2 shadow-lg">
               {suggestions.map((s) => (
                 <Link
                   key={s.code}
@@ -334,6 +334,33 @@ export default function FundDetailPage() {
         </motion.div>
       </section>
 
+      {/* 阅读指引 */}
+      <motion.section
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.06, ease: [0.23, 1, 0.32, 1] }}
+        className="mb-6 rounded-control border border-border bg-muted/40 p-3"
+      >
+        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <BookOpen className="h-3.5 w-3.5" />
+          阅读指引
+        </div>
+        <ul className="mt-1.5 space-y-0.5 text-xs leading-relaxed text-muted-foreground">
+          <li>· 收益与涨跌数字红涨绿跌；ETF 为场内实时行情，场外基金净值为 T-1</li>
+          <li>· 「深度分析」需额外加载回撤曲线、同类对比与持有人结构，可点击按需加载</li>
+          <li>· 数据缺失时统一显示「—」，不会用示例数据填充</li>
+        </ul>
+      </motion.section>
+
+      {/* 白话结论：基金诊断（根据历史数据生成的解读） */}
+      <section className="mb-6 rounded-card border border-accent/20 bg-accent/5 p-5 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div><div className="flex items-center gap-2 text-sm font-semibold"><Zap className="h-4 w-4 text-accent" />基金诊断</div><p className="mt-2 text-sm leading-relaxed text-muted-foreground">{diagnosis}</p></div>
+          <div className="grid grid-cols-2 gap-3 text-sm sm:min-w-[250px]"><div className="rounded-control border border-border bg-background/70 p-3"><span className="block text-xs text-muted-foreground">近一年收益</span><strong className={fund.oneYearReturn == null ? "mt-1 block text-muted-foreground" : fund.oneYearReturn >= 0 ? "mt-1 block text-rise" : "mt-1 block text-fall"}>{formatPercent(fund.oneYearReturn)}</strong></div><div className="rounded-control border border-border bg-background/70 p-3"><span className="block text-xs text-muted-foreground">最大回撤</span><strong className="mt-1 block text-fall">{formatPercent(fund.metrics.maxDrawdown)}</strong></div></div>
+        </div>
+        <p className="mt-4 border-t border-accent/10 pt-3 text-xs text-muted-foreground">根据历史数据生成，仅帮助理解，不构成买卖建议。</p>
+      </section>
+
       {/* Meta info */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
@@ -341,11 +368,11 @@ export default function FundDetailPage() {
         transition={{ duration: 0.6, delay: 0.08, ease: [0.23, 1, 0.32, 1] }}
         className="mb-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4"
       >
-        <MetaItem label="基金规模" value={fund.size} />
-        <MetaItem label="成立时间" value={fund.inceptionDate} />
+        <StatItem label="基金规模" value={fund.size} />
+        <StatItem label="成立时间" value={fund.inceptionDate} />
         {/* 投资风格当前一律为 null（无真实持仓风格数据）-> 显示"—"，不猜。 */}
-        <MetaItem label="投资风格" value={fund.investmentStyle ?? "—"} />
-        <MetaItem
+        <StatItem label="投资风格" value={fund.investmentStyle ?? "—"} />
+        <StatItem
           label="基金经理"
           value={
             // 原代码写的是 `managerDays !== undefined`，而后端给的是 null ——
@@ -370,7 +397,7 @@ export default function FundDetailPage() {
           icon={TrendingUp}
           delay={0.1}
         />
-        <div className="rounded-2xl border border-border bg-background p-4">
+        <div className="rounded-card border border-border bg-background p-4">
           <div className="text-xs text-muted-foreground">回撤修复</div>
           <div className={`mt-1 text-xl font-semibold ${recoveryClass}`}>{recoveryStatus}</div>
           <p className="mt-1 text-xs text-muted-foreground">根据最新净值相对历史高点判断</p>
@@ -415,26 +442,8 @@ export default function FundDetailPage() {
             { label: "周收益", value: fund.returns.weekly },
             { label: "月收益", value: fund.returns.monthly },
           ].map((item) => (
-            <div
-              key={item.label}
-              className="rounded-2xl border border-border bg-background p-4"
-            >
-              <div className="text-xs text-muted-foreground">{item.label}</div>
-              <div
-                className={`mt-1 text-xl font-semibold tabular-nums ${
-                  item.value == null
-                    ? "text-muted-foreground"
-                    : item.value >= 0
-                      ? "text-positive"
-                      : "text-negative"
-                }`}
-              >
-                {/* 历史不足时后端返回 null。旧代码直接 item.value >= 0，
-                    null 会被强制转成 0 并渲染成绿色的 "+0.00%" —— 把"算不出来"
-                    伪装成一个真实的持平收益。 */}
-                {formatPercent(item.value)}
-              </div>
-            </div>
+            /* 区间收益统一用 ReturnStat：红涨绿跌、两位小数、缺失显示「—」 */
+            <ReturnStat key={item.label} label={item.label} value={item.value} />
           ))}
         </motion.div>
 
@@ -443,7 +452,7 @@ export default function FundDetailPage() {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.3, ease: [0.23, 1, 0.32, 1] }}
-            className="flex flex-col justify-center rounded-2xl border border-border bg-background p-4"
+            className="flex flex-col justify-center rounded-card border border-border bg-background p-4"
           >
             <div className="text-xs text-muted-foreground">收益排名</div>
             <div className="mt-1 text-2xl font-semibold tabular-nums">
@@ -463,7 +472,7 @@ export default function FundDetailPage() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.32, ease: [0.23, 1, 0.32, 1] }}
-        className="mb-5 rounded-2xl border border-border bg-background p-4 sm:p-5"
+        className="mb-5 rounded-card border border-border bg-background p-4 sm:p-5"
       >
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -544,7 +553,7 @@ export default function FundDetailPage() {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.35, ease: [0.23, 1, 0.32, 1] }}
-            className="rounded-2xl border border-border bg-background p-4 sm:p-5"
+            className="rounded-card border border-border bg-background p-4 sm:p-5"
           >
             <div className="mb-3">
               <h3 className="text-base font-semibold tracking-tight">历史最大回撤</h3>
@@ -561,7 +570,7 @@ export default function FundDetailPage() {
             </div>
           </motion.div>
         ) : (
-          <div className="flex min-h-[340px] flex-col justify-center rounded-2xl border border-dashed border-border bg-muted/20 p-6">
+          <div className="flex min-h-[340px] flex-col justify-center rounded-card border border-dashed border-border bg-muted/20 p-6">
             <div className="text-sm font-semibold">深度分析</div>
             <p className="mt-2 max-w-sm text-sm text-muted-foreground">
               回撤曲线、同类对比和持有人结构需要额外读取数据。核心行情已经加载，点击后再加载这些分析。
@@ -579,7 +588,7 @@ export default function FundDetailPage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.38, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-2xl border border-border bg-background p-4 sm:p-5"
+          className="rounded-card border border-border bg-background p-4 sm:p-5"
         >
           <div className="mb-3">
             <h3 className="text-base font-semibold tracking-tight">风险指标</h3>
@@ -631,7 +640,7 @@ export default function FundDetailPage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.41, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-2xl border border-border bg-background p-4 sm:p-5"
+          className="rounded-card border border-border bg-background p-4 sm:p-5"
         >
           <div className="mb-3">
             <h3 className="text-base font-semibold tracking-tight">行业分布</h3>
@@ -655,12 +664,7 @@ export default function FundDetailPage() {
                   ))}
                 </Pie>
                 <Tooltip
-                  contentStyle={{
-                    background: "var(--background)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "12px",
-                    boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
-                  }}
+                  contentStyle={RECHARTS_TOOLTIP_STYLE}
                   itemStyle={{ color: "var(--foreground)", fontSize: 13 }}
                   formatter={(value, name) => [`${value}%`, name]}
                 />
@@ -698,7 +702,7 @@ export default function FundDetailPage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.44, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-2xl border border-border bg-background p-4 sm:p-5"
+          className="rounded-card border border-border bg-background p-4 sm:p-5"
         >
           <div className="mb-3">
             <h3 className="text-base font-semibold tracking-tight">重仓方向</h3>
@@ -714,7 +718,7 @@ export default function FundDetailPage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.47, ease: [0.23, 1, 0.32, 1] }}
-          className="mb-5 rounded-2xl border border-border bg-background p-4 sm:p-5"
+          className="mb-5 rounded-card border border-border bg-background p-4 sm:p-5"
         >
           <div className="mb-3">
             <h3 className="text-base font-semibold tracking-tight">同类基金对比</h3>
@@ -730,7 +734,7 @@ export default function FundDetailPage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.49, ease: [0.23, 1, 0.32, 1] }}
-          className="mb-5 rounded-2xl border border-border bg-background p-4 sm:p-5"
+          className="mb-5 rounded-card border border-border bg-background p-4 sm:p-5"
         >
           <div className="mb-3">
             <div className="flex items-center gap-2">
@@ -755,25 +759,20 @@ export default function FundDetailPage() {
                   dataKey="date"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
+                  tick={RECHARTS_TICK_PROPS}
                   dy={8}
                 />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
+                  tick={RECHARTS_TICK_PROPS}
                   domain={[0, 100]}
                   tickFormatter={(v) => `${v}%`}
                 />
                 <Tooltip
-                  contentStyle={{
-                    background: "var(--background)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "12px",
-                    boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
-                  }}
+                  contentStyle={RECHARTS_TOOLTIP_STYLE}
                   itemStyle={{ fontSize: 13 }}
-                  formatter={(value) => [`${Number(value).toFixed(1)}%`, undefined]}
+                  formatter={(value) => [`${Number(value).toFixed(2)}%`, undefined]}
                 />
                 <Legend
                   verticalAlign="top"
@@ -786,8 +785,8 @@ export default function FundDetailPage() {
                 <Area
                   type="monotone"
                   dataKey="机构持有"
-                  stroke="#0071e3"
-                  fill="#0071e3"
+                  stroke={CHART_SERIES[0]}
+                  fill={CHART_SERIES[0]}
                   fillOpacity={0.08}
                   strokeWidth={2}
                   dot={false}
@@ -795,8 +794,8 @@ export default function FundDetailPage() {
                 <Area
                   type="monotone"
                   dataKey="个人持有"
-                  stroke="#ff9500"
-                  fill="#ff9500"
+                  stroke={CHART_SERIES[3]}
+                  fill={CHART_SERIES[3]}
                   fillOpacity={0.08}
                   strokeWidth={2}
                   dot={false}
@@ -804,8 +803,8 @@ export default function FundDetailPage() {
                 <Area
                   type="monotone"
                   dataKey="内部持有"
-                  stroke="#af52de"
-                  fill="#af52de"
+                  stroke={CHART_SERIES[2]}
+                  fill={CHART_SERIES[2]}
                   fillOpacity={0.06}
                   strokeWidth={2}
                   dot={false}
@@ -821,7 +820,7 @@ export default function FundDetailPage() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.5, ease: [0.23, 1, 0.32, 1] }}
-        className="flex flex-col items-start justify-between gap-4 rounded-2xl border border-border bg-muted/40 p-4 sm:flex-row sm:items-center sm:p-5"
+        className="flex flex-col items-start justify-between gap-4 rounded-card border border-border bg-muted/40 p-4 sm:flex-row sm:items-center sm:p-5"
       >
         <div>
           <h4 className="text-base font-semibold">想对比多只基金？</h4>
@@ -834,15 +833,6 @@ export default function FundDetailPage() {
           </Button>
         </Link>
       </motion.div>
-    </div>
-  );
-}
-
-function MetaItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border bg-background p-3">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-0.5 text-sm font-medium">{value}</div>
     </div>
   );
 }

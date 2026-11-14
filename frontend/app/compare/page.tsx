@@ -4,8 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/page-header";
+import { SignedChange } from "@/components/signed-change";
 import { motion } from "framer-motion";
-import { Plus, Search, X, TrendingDown, TrendingUp, BarChart3 } from "lucide-react";
+import { Plus, Search, X, BarChart3 } from "lucide-react";
 import Link from "next/link";
 import {
   CartesianGrid,
@@ -26,8 +28,14 @@ import {
   searchFunds,
   formatPercent,
 } from "@/services/fund";
+import {
+  CHART_SERIES,
+  RECHARTS_TICK_PROPS,
+  RECHARTS_TOOLTIP_STYLE,
+} from "@/lib/chart-theme";
 
-const COLORS = ["#0071e3", "#ff3b30", "#00a550", "#ff9500", "#af52de", "#5856d6"];
+// 多序列对比配色统一取自全站图表调色板（lib/chart-theme）
+const COLORS = CHART_SERIES;
 
 // The market endpoint keeps the full history for detail-page zooming.  The
 // compare view has no range control, so keep only the latest year here.
@@ -164,25 +172,16 @@ export default function ComparePage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
-      {/* Header */}
-      <section className="mb-8">
-        <motion.h1
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
-          className="text-2xl font-semibold tracking-tight sm:text-3xl"
-        >
-          基金对比
-        </motion.h1>
-        <motion.p
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.05, ease: [0.23, 1, 0.32, 1] }}
-          className="mt-2 text-muted-foreground"
-        >
-          同时比较多只基金，从收益、风险与性价比中做出更理性的选择
-        </motion.p>
-      </section>
+      {/* Header：标题与说明 + 阅读指引（全站统一结构） */}
+      <PageHeader
+        title="基金对比"
+        description="同时比较多只基金，从收益、风险与性价比中做出更理性的选择"
+        guide={[
+          "走势曲线按净值归一化（都从 1.0 开始），只反映区间相对变化，不代表绝对收益高低",
+          "收益与回撤保留两位小数，红涨绿跌；夏普比率越高代表单位风险换来的收益越多",
+          "至少加入两只基金后，下方会出现对比表格",
+        ]}
+      />
 
       {/* Search & Add */}
       <motion.div
@@ -200,7 +199,7 @@ export default function ComparePage() {
             className="h-11 rounded-2xl border-border bg-background pl-11 text-base shadow-sm placeholder:text-muted-foreground/60"
           />
           {suggestions.length > 0 && (
-            <div className="absolute z-20 mt-2 w-full rounded-2xl border border-border bg-background p-2 shadow-lg">
+            <div className="absolute z-20 mt-2 w-full rounded-card border border-border bg-background p-2 shadow-lg">
               {suggestions.map((s) => (
                 <button
                   key={s.code}
@@ -230,7 +229,7 @@ export default function ComparePage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.15, ease: [0.23, 1, 0.32, 1] }}
-          className="mb-6 rounded-2xl border border-border bg-background p-4 sm:p-5"
+          className="mb-6 rounded-card border border-border bg-background p-4 sm:p-5"
         >
           <div className="mb-4">
             <h3 className="text-base font-semibold tracking-tight">收益走势对比</h3>
@@ -244,23 +243,18 @@ export default function ComparePage() {
                   dataKey="date"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
+                  tick={RECHARTS_TICK_PROPS}
                   dy={8}
                 />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
+                  tick={RECHARTS_TICK_PROPS}
                   domain={["auto", "auto"]}
                   tickFormatter={(v) => `${((v - 1) * 100).toFixed(0)}%`}
                 />
                 <Tooltip
-                  contentStyle={{
-                    background: "var(--background)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "12px",
-                    boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
-                  }}
+                  contentStyle={RECHARTS_TOOLTIP_STYLE}
                   itemStyle={{ fontSize: 13 }}
                   formatter={(value) => [
                     `${((Number(value) - 1) * 100).toFixed(2)}%`,
@@ -302,7 +296,7 @@ export default function ComparePage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-2xl border border-border bg-background p-2"
+          className="rounded-card border border-border bg-background p-2"
         >
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -359,30 +353,11 @@ export default function ComparePage() {
                     <td className="px-4 py-3 text-right tabular-nums">
                       {fund.detail?.nav?.toFixed(4) ?? "—"}
                     </td>
-                    <td
-                      className={`px-4 py-3 text-right tabular-nums font-medium ${
-                        fund.detail?.changePct == null
-                          ? "text-muted-foreground"
-                          : fund.detail.changePct >= 0
-                            ? "text-positive"
-                            : "text-negative"
-                      }`}
-                    >
+                    <td className="px-4 py-3 text-right tabular-nums">
                       {fund.detail ? (
-                        fund.detail.changePct == null ? (
-                          <span className="text-muted-foreground">—</span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1">
-                            {fund.detail.changePct >= 0 ? (
-                              <TrendingUp className="h-3 w-3" />
-                            ) : (
-                              <TrendingDown className="h-3 w-3" />
-                            )}
-                            {formatPercent(fund.detail.changePct * 0.01)}
-                          </span>
-                        )
+                        <SignedChange value={fund.detail.changePct} />
                       ) : (
-                        "—"
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </td>
                     {metrics.map((m) => {
@@ -402,8 +377,8 @@ export default function ComparePage() {
                             value == null
                               ? ""
                               : value >= 0
-                                ? "text-positive"
-                                : "text-negative"
+                                ? "text-rise"
+                                : "text-fall"
                           }`}
                         >
                           {value == null ? "—" : m.format(value)}
@@ -443,7 +418,7 @@ export default function ComparePage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.25, ease: [0.23, 1, 0.32, 1] }}
-          className="mt-6 rounded-2xl border border-dashed border-border bg-muted/40 p-12 text-center"
+          className="mt-6 rounded-card border border-dashed border-border bg-muted/40 p-12 text-center"
         >
           <BarChart3 className="mx-auto mb-3 h-10 w-10 text-muted-foreground/40" />
           <p className="text-sm text-muted-foreground">
@@ -457,11 +432,16 @@ export default function ComparePage() {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="mt-6 rounded-2xl border border-border bg-background p-4 text-center text-sm text-muted-foreground"
+          className="mt-6 rounded-card border border-border bg-background p-4 text-center text-sm text-muted-foreground"
         >
           正在加载基金数据...
         </motion.div>
       )}
+
+      {/* 披露 */}
+      <footer className="mt-6 text-xs leading-relaxed text-muted-foreground">
+        对比数据来自 akshare 公开接口，归一化走势与各项指标仅供参考，不构成投资建议。
+      </footer>
     </div>
   );
 }

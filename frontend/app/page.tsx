@@ -9,6 +9,7 @@ import { motion } from "framer-motion";
 import {
   ArrowRight,
   BarChart3,
+  BookOpen,
   Clock,
   FileText,
   PieChart,
@@ -44,41 +45,37 @@ const STALE_TIME = {
   portfolioOverview: 5 * 60 * 1000,// 组合总览：5 分钟（基于持仓 + 净值变化）
 } as const;
 
+// 快速入口图标统一一种样式（bg-muted + accent 图标），不再一入口一色
 const quickLinks = [
   {
     href: "/fund",
     title: "基金分析",
     desc: "查询单只基金业绩与风险",
     icon: BarChart3,
-    color: "bg-accent",
   },
   {
     href: "/portfolio",
     title: "投资组合",
     desc: "生成并跟踪资产配置",
     icon: PieChart,
-    color: "bg-foreground",
   },
   {
     href: "/insights",
     title: "组合洞察",
     desc: "解释组合今天为什么变化",
     icon: Sparkles,
-    color: "bg-accent",
   },
   {
     href: "/review",
     title: "投资复盘",
     desc: "回顾收益与优化建议",
     icon: FileText,
-    color: "bg-muted",
   },
   {
     href: "/compare",
     title: "基金对比",
     desc: "多只基金横向比较",
     icon: Scale,
-    color: "bg-accent",
   },
 ];
 
@@ -141,7 +138,7 @@ export default function HomePage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-2xl border border-border bg-background p-5 sm:p-6"
+          className="rounded-card border border-border bg-background p-5 sm:p-6"
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="max-w-xl">
@@ -181,7 +178,7 @@ export default function HomePage() {
               />
             </div>
             {suggestions.length > 0 && (
-              <div className="absolute z-20 mt-2 w-full rounded-2xl border border-border bg-background p-2 shadow-lg">
+              <div className="absolute z-20 mt-2 w-full rounded-card border border-border bg-background p-2 shadow-lg">
                 {suggestions.map((fund) => (
                   <Link
                     key={fund.code}
@@ -223,13 +220,9 @@ export default function HomePage() {
             >
               <Link
                 href={item.href}
-                className="group block rounded-2xl border border-border bg-background p-4 transition-shadow hover:shadow-lg"
+                className="group block rounded-card border border-border bg-background p-4 transition-shadow hover:shadow-lg"
               >
-                <div
-                  className={`mb-3 flex h-9 w-9 items-center justify-center rounded-xl ${item.color} ${
-                    item.color === "bg-muted" ? "text-foreground" : "text-white"
-                  }`}
-                >
+                <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-muted text-accent">
                   <item.icon className="h-4 w-4" />
                 </div>
                 <h3 className="text-sm font-semibold">{item.title}</h3>
@@ -240,13 +233,33 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* 阅读指引：与全站其他页面同一结构位置（标题说明 → 阅读指引 → 数据主体 → 披露） */}
+      <section className="mb-5">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.18, ease: [0.23, 1, 0.32, 1] }}
+          className="rounded-control border border-border bg-muted/40 p-3"
+        >
+          <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <BookOpen className="h-3.5 w-3.5" />
+            阅读指引
+          </div>
+          <ul className="mt-1.5 space-y-0.5 text-xs leading-relaxed text-muted-foreground">
+            <li>· 收益与涨跌数字遵循 A 股习惯：红色为涨/盈利，绿色为跌/亏损</li>
+            <li>· 所有数据均来自真实公开接口，缺失时显示「—」，不用示例数据填充</li>
+            <li>· 搜索基金代码或名称，可进入单只基金的深度分析页</li>
+          </ul>
+        </motion.div>
+      </section>
+
       {/* Portfolio + Market Indices */}
       <section className="mb-5 grid gap-4 lg:grid-cols-3">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.35, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-2xl border border-border bg-background p-4 sm:p-5 lg:col-span-2"
+          className="rounded-card border border-border bg-background p-4 sm:p-5 lg:col-span-2"
         >
           <div className="mb-3 flex items-center justify-between">
             <div>
@@ -295,7 +308,7 @@ export default function HomePage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.4, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-2xl border border-border bg-background p-4 sm:p-5"
+          className="rounded-card border border-border bg-background p-4 sm:p-5"
         >
           <div className="mb-3">
             <h2 className="text-base font-semibold tracking-tight">市场指数表现</h2>
@@ -337,7 +350,7 @@ export default function HomePage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.55, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-2xl border border-border bg-background p-4 sm:p-5 lg:col-span-2"
+          className="rounded-card border border-border bg-background p-4 sm:p-5 lg:col-span-2"
         >
           <div className="mb-3 flex items-center justify-between">
             <div>
@@ -361,7 +374,7 @@ export default function HomePage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.6, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-2xl border border-border bg-background p-4 sm:p-5"
+          className="rounded-card border border-border bg-background p-4 sm:p-5"
         >
           <div className="mb-3">
             <h2 className="text-base font-semibold tracking-tight">最近浏览</h2>
@@ -370,6 +383,11 @@ export default function HomePage() {
           <RecentWatched funds={recentWatched} />
         </motion.div>
       </section>
+
+      {/* 披露 */}
+      <footer className="mt-6 border-t border-border pt-4 text-xs leading-relaxed text-muted-foreground">
+        数据来自 akshare 公开接口，仅供参考，不构成投资建议。市场有风险，投资需谨慎。
+      </footer>
     </div>
   );
 }
