@@ -2,30 +2,24 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { MetricCard } from "@/components/metric-card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { motion } from "framer-motion";
-import {
-  ArrowRight,
-  BarChart3,
-  Clock,
-  FileText,
-  PieChart,
-  Scale,
-  Search,
-  Sparkles,
-  TrendingDown,
-  TrendingUp,
-} from "lucide-react";
 import Link from "next/link";
+import { ArrowRight, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { PortfolioOverview } from "@/components/portfolio-overview";
 import { FundRankings } from "@/components/fund-rankings";
 import { RecentWatched } from "@/components/recent-watched";
+import {
+  DataState,
+  PageHeader,
+  PlainConclusion,
+  ResearchSection,
+  SourceNote,
+} from "@/components/research-ui";
 import { useFundSearch } from "@/hooks/use-fund-search";
 import {
   MarketStatus,
   PortfolioOverview as PortfolioOverviewData,
+  formatCurrency,
   formatPercent,
   getMarketIndices,
   getMarketStatus,
@@ -34,58 +28,23 @@ import {
   getRecentlyWatched,
 } from "@/services/fund";
 
-// ── React Query staleTime 配置 ──
-
 const STALE_TIME = {
-  rankings: 30 * 60 * 1000,       // 基金排行榜：30 分钟（每日更新一次）
-  marketIndices: 2 * 60 * 1000,    // 市场指数：2 分钟（实时变动）
-  marketStatus: 5 * 60 * 1000,     // 市场状态：5 分钟（仅在开盘/午休/收盘时切换）
-  recentlyWatched: 0,              // 最近浏览：本地 localStorage，每次进入首页都读取最新
-  portfolioOverview: 5 * 60 * 1000,// 组合总览：5 分钟（基于持仓 + 净值变化）
+  rankings: 30 * 60 * 1000,
+  marketIndices: 2 * 60 * 1000,
+  marketStatus: 5 * 60 * 1000,
+  recentlyWatched: 0,
+  portfolioOverview: 5 * 60 * 1000,
 } as const;
 
-const quickLinks = [
-  {
-    href: "/fund",
-    title: "基金分析",
-    desc: "查询单只基金业绩与风险",
-    icon: BarChart3,
-    color: "bg-accent",
-  },
-  {
-    href: "/portfolio",
-    title: "投资组合",
-    desc: "生成并跟踪资产配置",
-    icon: PieChart,
-    color: "bg-foreground",
-  },
-  {
-    href: "/insights",
-    title: "组合洞察",
-    desc: "解释组合今天为什么变化",
-    icon: Sparkles,
-    color: "bg-accent",
-  },
-  {
-    href: "/review",
-    title: "投资复盘",
-    desc: "回顾收益与优化建议",
-    icon: FileText,
-    color: "bg-muted",
-  },
-  {
-    href: "/compare",
-    title: "基金对比",
-    desc: "多只基金横向比较",
-    icon: Scale,
-    color: "bg-accent",
-  },
-];
-
 const emptyPortfolio: PortfolioOverviewData = {
-  totalAssets: 0, todayReturn: null, todayReturnPct: null,
-  cumulativeReturn: 0, cumulativeReturnPct: 0,
-  allocation: [], riskLevel: null, riskScore: null,
+  totalAssets: 0,
+  todayReturn: null,
+  todayReturnPct: null,
+  cumulativeReturn: 0,
+  cumulativeReturnPct: 0,
+  allocation: [],
+  riskLevel: null,
+  riskScore: null,
 };
 
 const MARKET_INDEX_CODE_BY_NAME: Record<string, string> = {
@@ -99,277 +58,166 @@ const MARKET_INDEX_CODE_BY_NAME: Record<string, string> = {
 
 export default function HomePage() {
   const [query, setQuery] = useState("");
-  const { suggestions } = useFundSearch(query, 6);
+  const { suggestions, isSearching, isError } = useFundSearch(query, 6);
 
-  // ── React Query: 数据请求自动缓存、去重、后台更新 ──
-
-  const { data: rankings = [], isError: rankingsFailed } = useQuery({
+  const rankingsQuery = useQuery({
     queryKey: ["rankings", 8],
     queryFn: () => getFundRankings(8),
     staleTime: STALE_TIME.rankings,
   });
-
-  const { data: recentWatched = [] } = useQuery({
+  const recentQuery = useQuery({
     queryKey: ["recentlyWatched"],
     queryFn: getRecentlyWatched,
     staleTime: STALE_TIME.recentlyWatched,
   });
-
-  const { data: marketIndices = [], isError: indicesFailed } = useQuery({
+  const indicesQuery = useQuery({
     queryKey: ["marketIndices"],
     queryFn: getMarketIndices,
     staleTime: STALE_TIME.marketIndices,
   });
-
   const { data: marketStatus = null } = useQuery<MarketStatus | null>({
     queryKey: ["marketStatus"],
     queryFn: getMarketStatus,
     staleTime: STALE_TIME.marketStatus,
   });
-
-  const { data: portfolio = emptyPortfolio, isError: portfolioFailed } = useQuery<PortfolioOverviewData>({
+  const portfolioQuery = useQuery<PortfolioOverviewData>({
     queryKey: ["portfolioOverview"],
     queryFn: getPortfolioOverview,
     staleTime: STALE_TIME.portfolioOverview,
   });
 
+  const rankings = rankingsQuery.data ?? [];
+  const marketIndices = indicesQuery.data ?? [];
+  const portfolio = portfolioQuery.data ?? emptyPortfolio;
+
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
-      {/* Hero + Market status */}
-      <section className="mb-5">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-2xl border border-border bg-background p-5 sm:p-6"
-        >
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="max-w-xl">
-              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-                AI 基金投资分析助手
-              </h1>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                专业、克制、优雅地理解基金表现。输入代码，快速获得业绩、风险与配置建议。
-              </p>
+    <div className="page-container">
+      <PageHeader
+        title="基金与市场数据"
+        description="输入基金代码或名称，查看历史收益、回撤和持仓；组合页只使用你录入的真实交易。"
+        action={
+          marketStatus ? (
+            <div className="text-left text-xs text-muted-foreground sm:text-right">
+              <span className="block font-medium text-foreground">{marketStatus.status}</span>
+              <span>{marketStatus.session} · {marketStatus.updateTime}</span>
             </div>
-            {marketStatus && (
-              <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <div className="text-sm">
-                  <div className="font-medium">{marketStatus.status}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {marketStatus.session} · {marketStatus.updateTime}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          ) : undefined
+        }
+      />
 
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1, ease: [0.23, 1, 0.32, 1] }}
-            className="relative mt-5 max-w-xl"
-          >
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="输入基金代码 / 名称，例如 000001 或 华夏成长"
-                className="h-11 rounded-2xl border-border bg-muted/40 pl-11 text-base shadow-sm placeholder:text-muted-foreground/60"
-              />
-            </div>
-            {suggestions.length > 0 && (
-              <div className="absolute z-20 mt-2 w-full rounded-2xl border border-border bg-background p-2 shadow-lg">
-                {suggestions.map((fund) => (
-                  <Link
-                    key={fund.code}
-                    href={`/fund/${fund.code}`}
-                    onClick={() => setQuery("")}
-                    className="flex items-center justify-between rounded-xl px-3 py-2.5 text-sm hover:bg-muted"
-                  >
-                    <span className="font-medium">{fund.name}</span>
-                    <span className="text-muted-foreground">{fund.code}</span>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </motion.div>
-        </motion.div>
-      </section>
-
-      {/* Quick Links */}
-      <section className="mb-5">
-        <motion.h2
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.15, ease: [0.23, 1, 0.32, 1] }}
-          className="mb-3 text-base font-semibold tracking-tight"
-        >
-          快速入口
-        </motion.h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {quickLinks.map((item, index) => (
-            <motion.div
-              key={item.href}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{
-                duration: 0.5,
-                delay: 0.2 + index * 0.05,
-                ease: [0.23, 1, 0.32, 1],
-              }}
-            >
-              <Link
-                href={item.href}
-                className="group block rounded-2xl border border-border bg-background p-4 transition-shadow hover:shadow-lg"
-              >
-                <div
-                  className={`mb-3 flex h-9 w-9 items-center justify-center rounded-xl ${item.color} ${
-                    item.color === "bg-muted" ? "text-foreground" : "text-white"
-                  }`}
-                >
-                  <item.icon className="h-4 w-4" />
-                </div>
-                <h3 className="text-sm font-semibold">{item.title}</h3>
-                <p className="mt-0.5 text-xs text-muted-foreground">{item.desc}</p>
-              </Link>
-            </motion.div>
-          ))}
-        </div>
-      </section>
-
-      {/* Portfolio + Market Indices */}
-      <section className="mb-5 grid gap-4 lg:grid-cols-3">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.35, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-2xl border border-border bg-background p-4 sm:p-5 lg:col-span-2"
-        >
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <h2 className="text-base font-semibold tracking-tight">我的组合总览</h2>
-              <p className="text-xs text-muted-foreground">
-                {portfolioFailed
-                  ? "数据暂时不可用"
-                  : portfolio.totalAssets == null
-                    ? "持仓估值不完整"
-                    : portfolio.totalAssets > 0
-                      ? "真实持仓数据"
-                      : "暂无持仓记录"}
-              </p>
-            </div>
-            <Link href="/portfolio">
-              <Button variant="outline" size="sm" className="h-8 rounded-lg px-3">
-                {portfolio.totalAssets != null && portfolio.totalAssets > 0 ? "查看详情" : "录入持仓"}
-                <ArrowRight className="ml-1 h-3 w-3" />
-              </Button>
-            </Link>
-          </div>
-          {portfolioFailed ? (
-            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-              <PieChart className="mb-3 h-10 w-10 opacity-30" />
-              <p className="text-sm font-medium">数据暂时不可用，请重新加载。</p>
-              <p className="mt-1 text-xs">未使用任何替代数据</p>
-            </div>
-          ) : portfolio.totalAssets != null && portfolio.totalAssets > 0 ? (
-              <PortfolioOverview data={portfolio} />
-            ) : (
-              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                <PieChart className="mb-3 h-10 w-10 opacity-30" />
-                <p className="text-sm font-medium">暂无持仓数据</p>
-                <p className="mt-1 text-xs">前往投资组合页面录入真实交易</p>
-                <Link href="/portfolio" className="mt-3">
-                  <Button size="sm" className="h-8 rounded-lg px-3">
-                    开始录入
-                    <ArrowRight className="ml-1 h-3 w-3" />
-                  </Button>
-                </Link>
-              </div>
-            )}
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.4, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-2xl border border-border bg-background p-4 sm:p-5"
-        >
-          <div className="mb-3">
-            <h2 className="text-base font-semibold tracking-tight">市场指数表现</h2>
-            <p className="text-xs text-muted-foreground">主要宽基指数收盘情况</p>
-          </div>
-          <div className="grid gap-2">
-            {marketIndices.length > 0 ? (
-              marketIndices.map((item, index) => (
+      <section className="relative mb-10 max-w-3xl" aria-label="基金搜索">
+        <Search className="pointer-events-none absolute left-3 top-3.5 h-5 w-5 text-muted-foreground" />
+        <Input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="例如 000001 或 华夏成长"
+          className="h-12 pl-11"
+          aria-label="搜索基金代码或名称"
+        />
+        {query.trim() && (
+          <div className="absolute z-20 mt-1 w-full border border-border bg-background py-2">
+            {suggestions.length > 0 ? (
+              suggestions.map((fund) => (
                 <Link
-                  key={item.name}
-                  href={`/market/${item.code || MARKET_INDEX_CODE_BY_NAME[item.name]}`}
-                  aria-label={`查看${item.name}市场详情`}
-                  className="block rounded-3xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/20"
+                  key={fund.code}
+                  href={`/fund/${fund.code}`}
+                  onClick={() => setQuery("")}
+                  className="flex min-h-11 items-center justify-between gap-4 px-4 py-2 text-sm hover:bg-muted"
                 >
-                  <MetricCard
-                    title={item.name}
-                    value={item.value}
-                    trend={item.up ? "up" : "down"}
-                    trendValue={formatPercent(item.change * 0.01)}
-                    subtitle="今日收盘"
-                    icon={item.up ? TrendingUp : TrendingDown}
-                    delay={0.45 + index * 0.05}
-                  />
+                  <span className="truncate font-medium">{fund.name}</span>
+                  <span className="numeric text-xs text-muted-foreground">{fund.code}</span>
                 </Link>
               ))
             ) : (
-              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                <p className="text-sm">{indicesFailed ? "数据暂时不可用，请重新加载。" : "暂无真实指数数据。"}</p>
-                <p className="mt-1 text-xs">未使用任何替代数据</p>
-              </div>
+              <p className="px-4 py-3 text-xs text-muted-foreground">
+                {isSearching ? "正在搜索…" : isError ? "搜索暂时不可用，请稍后重试。" : "暂时没有匹配结果。"}
+              </p>
             )}
           </div>
-        </motion.div>
+        )}
       </section>
 
-      {/* Rankings + Recently watched */}
-      <section className="grid gap-4 lg:grid-cols-3">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.55, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-2xl border border-border bg-background p-4 sm:p-5 lg:col-span-2"
-        >
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <h2 className="text-base font-semibold tracking-tight">热门基金排行榜</h2>
-              <p className="text-xs text-muted-foreground">
-                {rankingsFailed ? "数据暂时不可用，请重新加载。" : "按近一年收益排序"}
-              </p>
-            </div>
-            <Link
-              href="/fund"
-              className="flex items-center text-xs font-medium text-accent hover:underline"
-            >
-              查看全部
-              <ArrowRight className="ml-1 h-3 w-3" />
-            </Link>
+      <PlainConclusion label="你的组合" note={null}>
+        {portfolioQuery.isLoading
+          ? "正在读取组合数据；基金搜索和市场行情仍可分别使用。"
+          : portfolioQuery.isError
+            ? "组合数据暂时不可用；基金与市场数据仍可分别查看，未使用替代数据。"
+            : portfolio.totalAssets != null && portfolio.totalAssets > 0
+              ? `当前组合总市值为 ${formatCurrency(portfolio.totalAssets)}，累计收益为 ${formatCurrency(portfolio.cumulativeReturn)}。先看整体，再下钻到每只持仓。`
+              : "还没有可用的持仓记录。可以先搜索基金，或到“我的组合”录入真实交易。"}
+      </PlainConclusion>
+
+      <nav className="mb-8 flex flex-wrap gap-x-6 gap-y-2 border-b border-border pb-5 text-sm" aria-label="常用功能">
+        <Link className="text-link" href="/compare">基金对比</Link>
+        <Link className="text-link" href="/workbench">分析工作台</Link>
+        <Link className="text-link" href="/review">投资复盘</Link>
+      </nav>
+
+      <ResearchSection
+        title="我的组合总览"
+        description="资产、收益与仓位比例；没有数据的指标显示为“—”。"
+        action={
+          <Link href="/portfolio" className="text-link inline-flex items-center gap-1 text-sm">
+            {portfolio.totalAssets != null && portfolio.totalAssets > 0 ? "查看持仓" : "录入持仓"}
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        }
+      >
+        {portfolioQuery.isLoading ? (
+          <DataState kind="loading" title="正在读取组合数据" />
+        ) : portfolioQuery.isError ? (
+          <DataState kind="error" title="组合数据暂时不可用" description="请稍后重新加载；这里不会使用假数据填充。" />
+        ) : (
+          <PortfolioOverview data={portfolio} />
+        )}
+      </ResearchSection>
+
+      <ResearchSection title="主要市场指数" description="指数最新点位与日涨跌；点击名称可查看历史走势和回撤。">
+        {indicesQuery.isLoading ? (
+          <DataState kind="loading" title="正在读取指数行情" />
+        ) : marketIndices.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="data-table">
+              <thead><tr><th>指数</th><th className="numeric">最新点位</th><th className="numeric">日涨跌</th><th className="numeric hidden sm:table-cell">数据说明</th></tr></thead>
+              <tbody>
+                {marketIndices.map((item) => {
+                  const code = item.code || MARKET_INDEX_CODE_BY_NAME[item.name];
+                  return (
+                    <tr key={item.name}>
+                      <td>{code ? <Link className="font-medium hover:text-accent" href={`/market/${code}`}>{item.name}</Link> : item.name}</td>
+                      <td className="numeric font-semibold">{item.value || "—"}</td>
+                      <td className={`numeric font-semibold ${item.change >= 0 ? "text-positive" : "text-negative"}`}>{formatPercent(item.change * 0.01)}</td>
+                      <td className="numeric hidden text-xs text-muted-foreground sm:table-cell">交易日更新</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
+        ) : (
+          <DataState kind="error" title="指数数据暂时不可用" description="未使用任何替代行情。" />
+        )}
+        <SourceNote>来源：akshare 公开接口；行情日期以各指数详情页的最新交易日为准。</SourceNote>
+      </ResearchSection>
+
+      <ResearchSection
+        title="近一年收益排行"
+        description="按后端返回的近一年收益排序；历史不足一年的基金不以 0% 代替。"
+        action={<Link href="/fund" className="text-link text-sm">查看基金列表</Link>}
+      >
+        {rankingsQuery.isLoading ? (
+          <DataState kind="loading" title="正在读取基金排行" />
+        ) : rankingsQuery.isError ? (
+          <DataState kind="error" title="基金排行暂时不可用" description="请稍后重试；未使用示例基金或替代收益。" />
+        ) : (
           <FundRankings funds={rankings} />
-        </motion.div>
+        )}
+        <SourceNote>排行仅描述历史表现，不代表未来结果，也不构成买卖建议。</SourceNote>
+      </ResearchSection>
 
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.6, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-2xl border border-border bg-background p-4 sm:p-5"
-        >
-          <div className="mb-3">
-            <h2 className="text-base font-semibold tracking-tight">最近浏览</h2>
-            <p className="text-xs text-muted-foreground">近期查看过的基金</p>
-          </div>
-          <RecentWatched funds={recentWatched} />
-        </motion.div>
-      </section>
+      <ResearchSection title="最近浏览" description="保存在当前浏览器中的基金查看记录。">
+        <RecentWatched funds={recentQuery.data ?? []} />
+      </ResearchSection>
     </div>
   );
 }
