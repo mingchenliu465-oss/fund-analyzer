@@ -50,8 +50,8 @@
 .quote>span { color:#8f9fb6; font-size:11px; }
 .quote>b { margin-left:14px; font-size:17px; font-weight:500; font-variant-numeric:tabular-nums; }
 .quote small { margin-left:8px; font-size:10px; color:#94a4bb; font-weight:400; }
-.up { color:#ff8b95; }
-.down { color:#54d3b0; }
+.up { color:#ff453a; }  /* 涨：与全站 --rise 暗色值一致 */
+.down { color:#30d158; }  /* 跌：与全站 --fall 暗色值一致 */
 .toolbar { padding:12px 16px; border-top:1px solid #263247; border-bottom:1px solid #263247; flex-wrap:wrap; gap:10px; }
 .ranges { display:flex; gap:3px; }
 .ranges button { font-size:11px; padding:6px 8px; color:#9badc7; border-radius:4px; }

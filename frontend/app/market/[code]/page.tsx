@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   BarChart3,
+  BookOpen,
   CalendarDays,
   Clock,
   TrendingDown,
@@ -22,6 +23,8 @@ import { KLineChart } from "@/components/kline-chart";
 import { MetricCard } from "@/components/metric-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/segmented";
+import { ReturnStat, StatItem } from "@/components/stat-item";
 import {
   DrawdownPoint,
   KlinePoint,
@@ -210,7 +213,7 @@ export default function MarketIndexDetailPage() {
                 <div className="text-xs text-muted-foreground">日涨跌幅</div>
                 <div
                   className={`mt-1 flex items-center gap-1 text-2xl font-semibold tabular-nums sm:justify-end ${
-                    dailyReturn >= 0 ? "text-positive" : "text-negative"
+                    dailyReturn >= 0 ? "text-rise" : "text-fall"
                   }`}
                 >
                   {dailyReturn >= 0 ? (
@@ -226,16 +229,33 @@ export default function MarketIndexDetailPage() {
         </motion.div>
       </section>
 
+      {/* 阅读指引（全站统一结构） */}
+      <motion.section
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.04, ease: [0.23, 1, 0.32, 1] }}
+        className="mb-4 rounded-control border border-border bg-muted/40 p-3"
+      >
+        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <BookOpen className="h-3.5 w-3.5" />
+          阅读指引
+        </div>
+        <ul className="mt-1.5 space-y-0.5 text-xs leading-relaxed text-muted-foreground">
+          <li>· 涨跌与收益数字红涨绿跌；指数行情按交易日更新，周 K、月 K 由日线聚合</li>
+          <li>· 波动率、夏普比率与回撤由历史收盘价计算，仅供参考</li>
+        </ul>
+      </motion.section>
+
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.05, ease: [0.23, 1, 0.32, 1] }}
         className="mb-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4"
       >
-        <MetaItem label="发布方" value={profile?.publisher ?? "公开市场"} />
-        <MetaItem label="覆盖市场" value={profile?.market ?? "中国市场"} />
-        <MetaItem label="行情频率" value="交易日更新" />
-        <MetaItem
+        <StatItem label="发布方" value={profile?.publisher ?? "公开市场"} />
+        <StatItem label="覆盖市场" value={profile?.market ?? "中国市场"} />
+        <StatItem label="行情频率" value="交易日更新" />
+        <StatItem
           label="最新交易日"
           value={analytics.latest?.date ?? marketStatus?.updateTime ?? "--"}
         />
@@ -286,17 +306,14 @@ export default function MarketIndexDetailPage() {
           { label: "日收益", value: dailyReturn },
           { label: "周收益", value: analytics.returns.weekly },
           { label: "月收益", value: analytics.returns.monthly },
+          /* 无快照时 dailyReturn 等可能为 NaN：ReturnStat 内部 formatPercent
+             会显示「—」，与全站缺失值规范一致 */
         ].map((item) => (
-          <div key={item.label} className="rounded-2xl border border-border bg-background p-4">
-            <div className="text-xs text-muted-foreground">{item.label}</div>
-            <div
-              className={`mt-1 text-xl font-semibold tabular-nums ${
-                item.value >= 0 ? "text-positive" : "text-negative"
-              }`}
-            >
-              {formatOptionalPercent(item.value)}
-            </div>
-          </div>
+          <ReturnStat
+            key={item.label}
+            label={item.label}
+            value={Number.isFinite(item.value) ? item.value : null}
+          />
         ))}
       </motion.div>
 
@@ -304,7 +321,7 @@ export default function MarketIndexDetailPage() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.32, ease: [0.23, 1, 0.32, 1] }}
-        className="mb-5 rounded-2xl border border-border bg-background p-4 sm:p-5"
+        className="mb-5 rounded-card border border-border bg-background p-4 sm:p-5"
       >
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -318,40 +335,26 @@ export default function MarketIndexDetailPage() {
             </p>
           </div>
           <div className="flex flex-col gap-2">
-            <div className="flex flex-wrap gap-1 rounded-xl border border-border bg-muted/40 p-1">
-              {PERIODS.map((item) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  onClick={() => setPeriod(item.key)}
-                  disabled={chartFetching}
-                  className={`rounded-lg px-3 py-1 text-xs font-medium transition-colors ${
-                    period === item.key
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-            <div className="flex flex-wrap gap-1 rounded-xl border border-border bg-muted/40 p-1">
-              {RANGES.map((item) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  onClick={() => setChartRange(item.key)}
-                  disabled={chartFetching}
-                  className={`rounded-lg px-3 py-1 text-xs font-medium transition-colors ${
-                    chartRange === item.key
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl
+              value={period}
+              onChange={setPeriod}
+              options={PERIODS.map(({ key, label }) => ({
+                value: key,
+                label,
+                disabled: chartFetching,
+              }))}
+              ariaLabel="K 线周期"
+            />
+            <SegmentedControl
+              value={chartRange}
+              onChange={setChartRange}
+              options={RANGES.map(({ key, label }) => ({
+                value: key,
+                label,
+                disabled: chartFetching,
+              }))}
+              ariaLabel="时间范围"
+            />
           </div>
         </div>
 
@@ -382,7 +385,7 @@ export default function MarketIndexDetailPage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.35, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-2xl border border-border bg-background p-4 sm:p-5"
+          className="rounded-card border border-border bg-background p-4 sm:p-5"
         >
           <div className="mb-3">
             <h2 className="text-base font-semibold tracking-tight">历史回撤</h2>
@@ -403,7 +406,7 @@ export default function MarketIndexDetailPage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.38, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-2xl border border-border bg-background p-4 sm:p-5"
+          className="rounded-card border border-border bg-background p-4 sm:p-5"
         >
           <div className="mb-3">
             <h2 className="text-base font-semibold tracking-tight">最新交易数据</h2>
@@ -542,15 +545,6 @@ function formatLargeNumber(value: number | null | undefined): string {
   if (value >= 100_000_000) return `${(value / 100_000_000).toFixed(2)} 亿`;
   if (value >= 10_000) return `${(value / 10_000).toFixed(2)} 万`;
   return value.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
-}
-
-function MetaItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border bg-background p-3">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-0.5 text-sm font-medium">{value}</div>
-    </div>
-  );
 }
 
 function DataRow({ label, value }: { label: string; value: string }) {

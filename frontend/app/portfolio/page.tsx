@@ -25,7 +25,15 @@ import { MetricCard } from "@/components/metric-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
+import { PageHeader } from "@/components/page-header";
+import { SegmentedControl } from "@/components/ui/segmented";
 import { TradeModal } from "@/components/trade-modal";
+import {
+  CHART_PRIMARY,
+  RECHARTS_TICK_PROPS,
+  RECHARTS_TOOLTIP_STYLE,
+} from "@/lib/chart-theme";
 import { useFundSearch } from "@/hooks/use-fund-search";
 import {
   HoldingItem,
@@ -35,6 +43,8 @@ import {
   PortfolioHistoryPoint,
   PortfolioHistoryPeriod,
   AttributionResult,
+  formatCurrency,
+  formatPercentValue,
   getRealPortfolio,
   getAllHoldings,
   getPortfolioHistory,
@@ -362,8 +372,8 @@ export default function PortfolioPage() {
     <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
       {/* Error banner（后端不可达 / 加载失败） */}
       {error && (
-        <div className="mb-6 flex items-center justify-between rounded-2xl border border-negative/30 bg-negative/10 px-4 py-3 text-sm text-negative">
-          <span>{error}</span>
+        <Alert variant="error" className="mb-6">
+          {error}
           <Button
             variant="outline"
             size="sm"
@@ -372,50 +382,38 @@ export default function PortfolioPage() {
           >
             重试
           </Button>
-        </div>
+        </Alert>
       )}
       {portfolio?.has_stale_nav && !error && (
-        <div className="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
+        <Alert variant="warning" className="mb-6">
           部分持仓的最新净值暂不可用，当前市值使用最近有效净值或买入净值估算，待数据更新后会自动刷新。
-        </div>
+        </Alert>
       )}
 
       {/* 操作反馈 */}
       {notice && (
-        <div
-          className={`mb-6 rounded-2xl border px-4 py-3 text-sm ${
-            notice.type === "success"
-              ? "border-positive/30 bg-positive/10 text-positive"
-              : "border-negative/30 bg-negative/10 text-negative"
-          }`}
+        <Alert
+          variant={notice.type === "success" ? "success" : "error"}
+          className="mb-6"
         >
           {notice.text}
-        </div>
+        </Alert>
       )}
 
-      {/* Header */}
-      <section className="mb-8">
-        <motion.h1
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
-          className="text-3xl font-semibold tracking-tight sm:text-4xl"
-        >
-          我的持仓
-        </motion.h1>
-        <motion.p
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.05, ease: [0.23, 1, 0.32, 1] }}
-          className="mt-2 text-muted-foreground"
-        >
-          手动录入真实交易，实时计算持仓盈亏
-        </motion.p>
-      </section>
+      {/* Header：标题与说明 + 阅读指引（全站统一结构） */}
+      <PageHeader
+        title="我的持仓"
+        description="手动录入真实交易，实时计算持仓盈亏"
+        guide={[
+          "金额统一保留两位小数；盈亏红盈绿亏，行情缺失时显示「—」",
+          "「今日收益分析」把当日涨跌拆到每只持仓；资产走势可切换总净值视图与收益率视图",
+          "支持单笔录入与自动定投（按历史净值回算份额），已平仓记录在「已平仓记录」页签",
+        ]}
+      />
 
       {/* Asset history chart */}
       <section className="mb-8">
-        <div className="rounded-2xl border border-border bg-background p-4 sm:p-5">
+        <div className="rounded-card border border-border bg-background p-4 sm:p-5">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-base font-semibold tracking-tight">资产走势</h2>
@@ -426,8 +424,10 @@ export default function PortfolioPage() {
               </p>
             </div>
             <div className="flex flex-col gap-2">
-              <div className="flex gap-1 rounded-xl border border-border bg-muted/40 p-1">
-                {(
+              <SegmentedControl
+                value={historyPeriod}
+                onChange={setHistoryPeriod}
+                options={(
                   [
                     ["1W", "1周"],
                     ["1M", "1月"],
@@ -435,42 +435,18 @@ export default function PortfolioPage() {
                     ["1Y", "1年"],
                     ["ALL", "全部"],
                   ] as [PortfolioHistoryPeriod, string][]
-                ).map(([key, label]) => (
-                  <button
-                    key={key}
-                    onClick={() => setHistoryPeriod(key)}
-                    className={`rounded-lg px-3 py-1 text-xs font-medium transition-colors ${
-                      historyPeriod === key
-                        ? "bg-background shadow-sm text-foreground"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <div className="flex gap-1 rounded-xl border border-border bg-muted/40 p-1">
-                <button
-                  onClick={() => setHistoryView("value")}
-                  className={`rounded-lg px-3 py-1 text-xs font-medium transition-colors ${
-                    historyView === "value"
-                      ? "bg-background shadow-sm text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  总资产
-                </button>
-                <button
-                  onClick={() => setHistoryView("rate")}
-                  className={`rounded-lg px-3 py-1 text-xs font-medium transition-colors ${
-                    historyView === "rate"
-                      ? "bg-background shadow-sm text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  收益率
-                </button>
-              </div>
+                ).map(([value, label]) => ({ value, label }))}
+                ariaLabel="历史区间"
+              />
+              <SegmentedControl
+                value={historyView}
+                onChange={setHistoryView}
+                options={[
+                  { value: "value", label: "总资产" },
+                  { value: "rate", label: "收益率" },
+                ]}
+                ariaLabel="走势视图"
+              />
             </div>
           </div>
 
@@ -480,8 +456,8 @@ export default function PortfolioPage() {
                 <AreaChart data={historyData} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
                   <defs>
                     <linearGradient id="portfolioValueFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#0071e3" stopOpacity={0.18} />
-                      <stop offset="95%" stopColor="#0071e3" stopOpacity={0} />
+                      <stop offset="5%" stopColor={CHART_PRIMARY} stopOpacity={0.18} />
+                      <stop offset="95%" stopColor={CHART_PRIMARY} stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
@@ -489,14 +465,14 @@ export default function PortfolioPage() {
                     dataKey="date"
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
+                    tick={RECHARTS_TICK_PROPS}
                     minTickGap={24}
                     dy={8}
                   />
                   <YAxis
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
+                    tick={RECHARTS_TICK_PROPS}
                     tickFormatter={(v) =>
                       historyView === "value"
                         ? `¥${Number(v).toLocaleString()}`
@@ -504,28 +480,23 @@ export default function PortfolioPage() {
                     }
                   />
                   <Tooltip
-                    contentStyle={{
-                      background: "var(--background)",
-                      border: "1px solid var(--border)",
-                      borderRadius: "12px",
-                      boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
-                    }}
+                    contentStyle={RECHARTS_TOOLTIP_STYLE}
                     labelStyle={{ color: "var(--muted-foreground)", fontSize: 12 }}
                     itemStyle={{ fontSize: 13 }}
                     formatter={(value) =>
                       historyView === "value"
-                        ? [`¥${Number(value).toLocaleString()}`, "总资产"]
+                        ? [formatCurrency(Number(value)), "总资产"]
                         : [`${Number(value).toFixed(2)}%`, "收益率"]
                     }
                   />
                   <Area
                     type="monotone"
                     dataKey={historyView === "value" ? "total_value" : "profit_rate"}
-                    stroke="#0071e3"
+                    stroke={CHART_PRIMARY}
                     strokeWidth={2}
                     fill="url(#portfolioValueFill)"
                     dot={false}
-                    activeDot={{ r: 4, strokeWidth: 0, fill: "#0071e3" }}
+                    activeDot={{ r: 4, strokeWidth: 0, fill: CHART_PRIMARY }}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -552,21 +523,21 @@ export default function PortfolioPage() {
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           title="持仓市值"
-          value={`¥${totalValue.toLocaleString()}`}
+          value={formatCurrency(totalValue)}
           icon={Briefcase}
           delay={0.1}
         />
         <MetricCard
           title="累计成本"
-          value={`¥${totalCost.toLocaleString()}`}
+          value={formatCurrency(totalCost)}
           icon={DollarSign}
           delay={0.15}
         />
         <MetricCard
           title="浮动盈亏"
-          value={portfolio?.total_profit != null ? `¥${totalProfit.toLocaleString()}` : "暂无"}
+          value={portfolio?.total_profit != null ? formatCurrency(totalProfit) : "暂无"}
           trend={portfolio?.total_profit != null ? (isUp ? "up" : "down") : "neutral"}
-          trendValue={portfolio?.total_profit_pct != null ? `${isUp ? "+" : ""}${portfolio.total_profit_pct.toFixed(2)}%` : undefined}
+          trendValue={formatPercentValue(portfolio?.total_profit_pct)}
           icon={TrendingUp}
           delay={0.2}
         />
@@ -580,7 +551,7 @@ export default function PortfolioPage() {
 
       {/* 今日收益分析 */}
       <section className="mb-8">
-        <div className="rounded-2xl border border-border bg-background p-4 sm:p-5">
+        <div className="rounded-card border border-border bg-background p-4 sm:p-5">
           <div className="mb-4">
             <h2 className="text-base font-semibold tracking-tight">今日收益分析</h2>
             <p className="text-xs text-muted-foreground">看看今天收益来自哪里</p>
@@ -602,9 +573,9 @@ export default function PortfolioPage() {
                 <div className="rounded-xl border border-border bg-muted/20 px-3 py-2">
                   <div className="text-[11px] text-muted-foreground">上涨 / 下跌</div>
                   <div className="mt-1 text-sm font-medium tabular-nums">
-                    <span className="text-positive">{attribution.summary.gainers_count} 只上涨</span>
+                    <span className="text-rise">{attribution.summary.gainers_count} 只上涨</span>
                     <span className="mx-1 text-muted-foreground">·</span>
-                    <span className="text-negative">{attribution.summary.losers_count} 只下跌</span>
+                    <span className="text-fall">{attribution.summary.losers_count} 只下跌</span>
                   </div>
                 </div>
                 <div className="rounded-xl border border-border bg-muted/20 px-3 py-2">
@@ -625,15 +596,15 @@ export default function PortfolioPage() {
                       attribution.today_return == null
                         ? "text-muted-foreground"
                         : attribution.today_return >= 0
-                          ? "text-positive"
-                          : "text-negative"
+                          ? "text-rise"
+                          : "text-fall"
                     }`}
                   >
                     {/* 有贡献行时后端一定给出数字，但类型上是 nullable：
                         这里显式判空，避免将来上游改动时 null.toLocaleString() 崩页。 */}
                     {attribution.today_return == null
                       ? "—"
-                      : `${attribution.today_return >= 0 ? "+" : ""}¥${attribution.today_return.toLocaleString()}`}
+                      : `${attribution.today_return >= 0 ? "+" : ""}${formatCurrency(attribution.today_return)}`}
                   </div>
                 </div>
                 <div>
@@ -643,13 +614,11 @@ export default function PortfolioPage() {
                       attribution.today_return_pct == null
                         ? "text-muted-foreground"
                         : attribution.today_return_pct >= 0
-                          ? "text-positive"
-                          : "text-negative"
+                          ? "text-rise"
+                          : "text-fall"
                     }`}
                   >
-                    {attribution.today_return_pct == null
-                      ? "—"
-                      : `${attribution.today_return_pct >= 0 ? "+" : ""}${attribution.today_return_pct.toFixed(2)}%`}
+                    {formatPercentValue(attribution.today_return_pct)}
                   </div>
                 </div>
                 <div className="ml-auto max-w-[240px] text-right text-[11px] text-muted-foreground">
@@ -668,9 +637,9 @@ export default function PortfolioPage() {
                       key={c.fund_code}
                       className={`flex items-center justify-between rounded-xl border p-3 ${
                         isTop
-                          ? "border-positive/40 bg-positive/5"
+                          ? "border-rise/40 bg-rise/5"
                           : isBottom
-                            ? "border-negative/40 bg-negative/5"
+                            ? "border-fall/40 bg-fall/5"
                             : "border-border"
                       }`}
                     >
@@ -678,18 +647,17 @@ export default function PortfolioPage() {
                         <div className="truncate text-sm font-medium">{c.fund_name}</div>
                         <div className="text-xs text-muted-foreground">
                           {c.fund_code} · {c.shares.toLocaleString()} 份 · 涨跌{" "}
-                          {c.change_pct >= 0 ? "+" : ""}
-                          {c.change_pct}%
+                          {formatPercentValue(c.change_pct)}
                         </div>
                       </div>
                       <div
                         className={`text-right text-sm font-semibold tabular-nums ${
-                          c.contribution >= 0 ? "text-positive" : "text-negative"
+                          c.contribution >= 0 ? "text-rise" : "text-fall"
                         }`}
                       >
-                        {c.nav_stale ? "待更新" : `${c.contribution >= 0 ? "+" : ""}¥${c.contribution.toLocaleString()}`}
+                        {c.nav_stale ? "待更新" : `${c.contribution >= 0 ? "+" : ""}${formatCurrency(c.contribution)}`}
                         <div className="text-xs font-normal text-muted-foreground">
-                          对今日波动占比 {Math.abs(c.contribution_rate * 100).toFixed(1)}%
+                          对今日波动占比 {Math.abs(c.contribution_rate * 100).toFixed(2)}%
                         </div>
                       </div>
                     </div>
@@ -757,7 +725,7 @@ export default function PortfolioPage() {
         <motion.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: "auto" }}
-          className="mb-6 overflow-hidden rounded-2xl border border-border bg-background p-5"
+          className="mb-6 overflow-hidden rounded-card border border-border bg-background p-5"
         >
           {/* 模式切换：单笔 / 自动定投 */}
           <div className="mb-4 flex max-w-xs gap-1 rounded-xl border border-border bg-muted/40 p-1">
@@ -1059,7 +1027,7 @@ export default function PortfolioPage() {
       {/* ── Active holdings table ── */}
       {activeTab === "active" &&
         (activeHoldings.length === 0 ? (
-          <div className="rounded-2xl border border-border bg-background py-16 text-center text-muted-foreground">
+          <div className="rounded-card border border-border bg-background py-16 text-center text-muted-foreground">
             <Briefcase className="mx-auto mb-3 h-8 w-8 opacity-40" />
             <p>暂无持仓</p>
             <p className="mt-1 text-xs">点击“新增持仓”添加真实交易记录</p>
@@ -1076,7 +1044,7 @@ export default function PortfolioPage() {
       {/* ── Sold holdings table ── */}
       {activeTab === "sold" &&
         (soldHoldings.length === 0 ? (
-          <div className="rounded-2xl border border-border bg-background py-16 text-center text-muted-foreground">
+          <div className="rounded-card border border-border bg-background py-16 text-center text-muted-foreground">
             <History className="mx-auto mb-3 h-8 w-8 opacity-40" />
             <p>暂无已平仓记录</p>
             <p className="mt-1 text-xs">卖出持仓后将在此显示历史记录</p>
@@ -1096,6 +1064,11 @@ export default function PortfolioPage() {
           onConfirmEdit={handleConfirmEdit}
         />
       )}
+
+      {/* 披露 */}
+      <footer className="mt-6 text-xs leading-relaxed text-muted-foreground">
+        持仓与盈亏基于手动录入的交易记录和最新可得净值计算，仅供参考，不构成投资建议。部分行情延迟时会在页面顶部提示。
+      </footer>
     </div>
   );
 }
@@ -1114,7 +1087,7 @@ function HoldingsTable({
   onDelete: (id: number) => void;
 }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-border bg-background">
+    <div className="overflow-x-auto rounded-card border border-border bg-background">
       <table className="w-full text-sm">
         <thead className="border-b border-border bg-muted/40 text-left">
           <tr>
@@ -1150,7 +1123,7 @@ function HoldingsTable({
               </td>
               <td className="px-4 py-3 text-muted-foreground">{h.buy_date}</td>
               <td className="px-4 py-3 text-right tabular-nums">
-                ¥{(h.cost ?? 0).toLocaleString()}
+                {formatCurrency(h.cost ?? 0)}
               </td>
               <td className="px-4 py-3 text-right tabular-nums">
                 {h.shares.toLocaleString()}
@@ -1159,16 +1132,16 @@ function HoldingsTable({
                 {h.current_nav?.toFixed(4) ?? "—"}
               </td>
               <td className="px-4 py-3 text-right tabular-nums font-medium">
-                ¥{(h.current_value ?? 0).toLocaleString()}
+                {formatCurrency(h.current_value ?? 0)}
               </td>
               <td
                 className={`px-4 py-3 text-right tabular-nums font-medium ${
-                  h.profit == null ? "" : h.profit >= 0 ? "text-positive" : "text-negative"
+                  h.profit == null ? "" : h.profit >= 0 ? "text-rise" : "text-fall"
                 }`}
               >
                 {h.profit != null ? (
                   <>
-                    {h.profit >= 0 ? "+" : ""}¥{h.profit.toLocaleString()}
+                    {h.profit >= 0 ? "+" : ""}{formatCurrency(h.profit)}
                     <br />
                     <span className="text-xs">
                       ({h.profit >= 0 ? "+" : ""}
@@ -1219,7 +1192,7 @@ function HoldingsTable({
 
 function SoldTable({ holdings }: { holdings: HoldingItem[] }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-border bg-background">
+    <div className="overflow-x-auto rounded-card border border-border bg-background">
       <table className="w-full text-sm">
         <thead className="border-b border-border bg-muted/40 text-left">
           <tr>
@@ -1264,18 +1237,17 @@ function SoldTable({ holdings }: { holdings: HoldingItem[] }) {
                   {h.sell_date ?? "—"}
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums">
-                  ¥{cost.toLocaleString()}
+                  {formatCurrency(cost)}
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums">
-                  ¥{sellAmt.toLocaleString()}
+                  {formatCurrency(sellAmt)}
                 </td>
                 <td
                   className={`px-4 py-3 text-right tabular-nums font-medium ${
-                    realizedProfit >= 0 ? "text-positive" : "text-negative"
+                    realizedProfit >= 0 ? "text-rise" : "text-fall"
                   }`}
                 >
-                  {realizedProfit >= 0 ? "+" : ""}¥
-                  {realizedProfit.toLocaleString()}
+                  {realizedProfit >= 0 ? "+" : ""}{formatCurrency(realizedProfit)}
                   <br />
                   <span className="text-xs">
                     ({realizedProfit >= 0 ? "+" : ""}

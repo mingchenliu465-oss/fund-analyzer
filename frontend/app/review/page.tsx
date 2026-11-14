@@ -4,6 +4,12 @@ import { useEffect, useState } from "react";
 import { MetricCard } from "@/components/metric-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/page-header";
+import {
+  CHART_PRIMARY,
+  RECHARTS_TICK_PROPS,
+  RECHARTS_TOOLTIP_STYLE,
+} from "@/lib/chart-theme";
 import { motion } from "framer-motion";
 import {
   Activity,
@@ -184,29 +190,15 @@ export default function ReviewPage() {
   if (!hasData) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
-        <section className="mb-12">
-          <motion.h1
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
-            className="text-2xl font-semibold tracking-tight sm:text-3xl"
-          >
-            投资复盘
-          </motion.h1>
-          <motion.p
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.05, ease: [0.23, 1, 0.32, 1] }}
-            className="mt-2 text-muted-foreground"
-          >
-            回顾投资表现，识别收益来源与改进空间
-          </motion.p>
-        </section>
+        <PageHeader
+          title="投资复盘"
+          description="回顾投资表现，识别收益来源与改进空间"
+        />
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.1 }}
-          className="rounded-2xl border border-dashed border-border bg-muted/40 p-16 text-center"
+          className="rounded-card border border-dashed border-border bg-muted/40 p-16 text-center"
         >
           <Briefcase className="mx-auto mb-4 h-12 w-12 text-muted-foreground/30" />
           <h3 className="text-lg font-medium">暂无持仓数据</h3>
@@ -223,25 +215,16 @@ export default function ReviewPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
-      {/* Header */}
-      <section className="mb-8">
-        <motion.h1
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
-          className="text-2xl font-semibold tracking-tight sm:text-3xl"
-        >
-          投资复盘
-        </motion.h1>
-        <motion.p
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.05, ease: [0.23, 1, 0.32, 1] }}
-          className="mt-2 text-muted-foreground"
-        >
-          基于真实持仓数据的投资表现回顾
-        </motion.p>
-      </section>
+      {/* Header：标题与说明 + 阅读指引（全站统一结构） */}
+      <PageHeader
+        title="投资复盘"
+        description="基于真实持仓数据的投资表现回顾"
+        guide={[
+          "盈亏红盈绿亏，金额保留两位小数；收益缺失的持仓不参与「最佳/最差」评选",
+          "「AI 每日复盘」由规则基于真实持仓生成，暂未接入大模型",
+          "投资洞察是历史数据的归纳，不构成投资建议",
+        ]}
+      />
 
       {/* AI 每日复盘 */}
       <motion.section
@@ -250,7 +233,7 @@ export default function ReviewPage() {
         transition={{ duration: 0.6, delay: 0.12, ease: [0.23, 1, 0.32, 1] }}
         className="mb-8"
       >
-        <div className="rounded-2xl border border-border bg-background p-4 sm:p-5">
+        <div className="rounded-card border border-border bg-background p-4 sm:p-5">
           <div className="mb-3 flex items-start justify-between">
             <div>
               <div className="flex items-center gap-2">
@@ -290,7 +273,7 @@ export default function ReviewPage() {
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           title="持仓市值"
-          value={formatCurrency(totalValue, 0)}
+          value={formatCurrency(totalValue)}
           trend="neutral"
           subtitle={`${activeHoldings.length} 只基金`}
           icon={Briefcase}
@@ -298,7 +281,7 @@ export default function ReviewPage() {
         />
         <MetricCard
           title="浮动盈亏"
-          value={formatCurrency(totalProfit, 0)}
+          value={formatCurrency(totalProfit)}
           trend={totalProfit >= 0 ? "up" : "down"}
           trendValue={formatPercent(totalProfitPct * 0.01)}
           subtitle="累计未实现"
@@ -330,7 +313,7 @@ export default function ReviewPage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.3, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-2xl border border-border bg-background p-4 sm:p-5"
+          className="rounded-card border border-border bg-background p-4 sm:p-5"
         >
           <div className="mb-4">
             <h3 className="text-base font-semibold tracking-tight">持仓明细</h3>
@@ -344,33 +327,28 @@ export default function ReviewPage() {
                   dataKey="name"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
+                  tick={RECHARTS_TICK_PROPS}
                   dy={8}
                 />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
+                  tick={RECHARTS_TICK_PROPS}
                   tickFormatter={(v) => `¥${(v / 10000).toFixed(0)}万`}
                 />
                 <Tooltip
-                  contentStyle={{
-                    background: "var(--background)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "12px",
-                    boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
-                  }}
+                  contentStyle={RECHARTS_TOOLTIP_STYLE}
                   itemStyle={{ fontSize: 13 }}
-                  formatter={(value) => [formatCurrency(Number(value), 0), undefined]}
+                  formatter={(value) => [formatCurrency(Number(value)), undefined]}
                 />
                 <Area
                   type="monotone"
                   dataKey="value"
-                  stroke="#0071e3"
-                  fill="#0071e3"
+                  stroke={CHART_PRIMARY}
+                  fill={CHART_PRIMARY}
                   fillOpacity={0.08}
                   strokeWidth={2}
-                  dot={{ r: 3, fill: "#0071e3" }}
+                  dot={{ r: 3, fill: CHART_PRIMARY }}
                   name="当前市值"
                 />
               </AreaChart>
@@ -383,7 +361,7 @@ export default function ReviewPage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.35, ease: [0.23, 1, 0.32, 1] }}
-          className="rounded-2xl border border-border bg-background p-4 sm:p-5"
+          className="rounded-card border border-border bg-background p-4 sm:p-5"
         >
           <div className="mb-4">
             <h3 className="text-base font-semibold tracking-tight">资产类型分布</h3>
@@ -407,11 +385,11 @@ export default function ReviewPage() {
                       <span>占比 {item.value}%</span>
                       <span
                         className={`font-medium ${
-                          item.profit >= 0 ? "text-positive" : "text-negative"
+                          item.profit >= 0 ? "text-rise" : "text-fall"
                         }`}
                       >
                         {item.profit >= 0 ? "+" : ""}
-                        {formatCurrency(item.profit, 0)}
+                        {formatCurrency(item.profit)}
                       </span>
                     </div>
                   </div>
@@ -436,7 +414,7 @@ export default function ReviewPage() {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.4, ease: [0.23, 1, 0.32, 1] }}
-        className="mb-8 rounded-2xl border border-border bg-background p-2"
+        className="mb-8 rounded-card border border-border bg-background p-2"
       >
         <div className="px-4 py-4">
           <h3 className="text-base font-semibold tracking-tight">交易记录</h3>
@@ -485,18 +463,18 @@ export default function ReviewPage() {
                         {h.is_sold ? h.sell_date : "—"}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums">
-                        {formatCurrency(h.cost ?? 0, 0)}
+                        {formatCurrency(h.cost ?? 0)}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums">
-                        {displayValue != null ? formatCurrency(displayValue, 0) : "—"}
+                        {displayValue != null ? formatCurrency(displayValue) : "—"}
                       </td>
                       <td
                         className={`px-4 py-3 text-right tabular-nums font-medium ${
-                          profit >= 0 ? "text-positive" : "text-negative"
+                          profit >= 0 ? "text-rise" : "text-fall"
                         }`}
                       >
                         {profit >= 0 ? "+" : ""}
-                        {formatCurrency(profit, 0)}
+                        {formatCurrency(profit)}
                         <div className="text-xs">
                           ({profit >= 0 ? "+" : ""}
                           {profitPct.toFixed(2)}%)
@@ -566,6 +544,11 @@ export default function ReviewPage() {
           </div>
         </section>
       )}
+
+      {/* 披露 */}
+      <footer className="mt-6 text-xs leading-relaxed text-muted-foreground">
+        复盘基于手动录入的真实交易记录与最新可得净值，历史表现不代表未来收益，不构成投资建议。
+      </footer>
     </div>
   );
 }
