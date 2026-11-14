@@ -20,7 +20,7 @@ export function RecentWatched({ funds }: RecentWatchedProps) {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="border-t border-foreground">
       {funds.map((fund) => {
         // 涨跌幅缺失时后端返回 null。`?? 0` 会渲染成"上涨箭头 + +0.00%"，
         // 把"拿不到行情"伪装成一个真实的持平报价。
@@ -29,7 +29,7 @@ export function RecentWatched({ funds }: RecentWatchedProps) {
         <Link
           key={fund.code}
           href={`/fund/${fund.code}`}
-          className="flex items-center justify-between rounded-xl border border-border bg-background p-3 transition-colors hover:bg-muted/40"
+          className="flex min-h-16 items-center justify-between gap-4 border-b border-border py-3 transition-colors hover:bg-muted"
         >
           <div className="min-w-0 flex-1">
             <div className="truncate font-medium">{fund.name ?? "—"}</div>

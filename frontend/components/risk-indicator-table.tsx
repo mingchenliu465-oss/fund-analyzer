@@ -1,37 +1,31 @@
-"use client";
-
 import { FundMetrics, formatPercent, formatRatio } from "@/services/fund";
+import { KeyValueList } from "./research-ui";
 
-interface RiskIndicatorTableProps {
-  metrics: FundMetrics;
-}
-
-function safeFormatRatio(v: number | null | undefined): string {
-  return v != null ? formatRatio(v) : "—";
-}
-
-function safeFormatPercent(v: number | null | undefined, digits = 0): string {
-  return v != null ? formatPercent(v, digits) : "—";
-}
-
-export function RiskIndicatorTable({ metrics }: RiskIndicatorTableProps) {
-  const items = [
-    { label: "夏普比率", value: safeFormatRatio(metrics.sharpe), desc: "风险调整后收益" },
-    { label: "最大回撤", value: safeFormatPercent(metrics.maxDrawdown), desc: "历史极端亏损" },
-  ];
-
+export function RiskIndicatorTable({ metrics }: { metrics: FundMetrics }) {
   return (
-    <div className="grid grid-cols-2 gap-3">
-      {items.map((item) => (
-        <div
-          key={item.label}
-          className="rounded-xl border border-border p-3 transition-colors hover:bg-muted/30"
-        >
-          <div className="text-xs text-muted-foreground">{item.label}</div>
-          <div className="mt-1 text-lg font-semibold tabular-nums">{item.value}</div>
-          <div className="text-xs text-muted-foreground">{item.desc}</div>
-        </div>
-      ))}
-    </div>
+    <KeyValueList
+      items={[
+        {
+          label: "夏普比率",
+          note: "每承担一单位波动获得的风险调整后收益",
+          value: metrics.sharpe == null ? "—" : formatRatio(metrics.sharpe),
+        },
+        {
+          label: "最大回撤",
+          note: "从历史高点到随后低点的最大跌幅",
+          value: formatPercent(metrics.maxDrawdown),
+        },
+        {
+          label: "年化波动率",
+          note: "历史日收益波动的年化幅度",
+          value: formatPercent(metrics.volatility),
+        },
+        {
+          label: "索提诺比率",
+          note: "只把下行波动计为风险的收益指标",
+          value: metrics.sortino == null ? "—" : formatRatio(metrics.sortino),
+        },
+      ]}
+    />
   );
 }

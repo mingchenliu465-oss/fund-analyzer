@@ -17,7 +17,7 @@ export function useFundSearch(query: string, limit = 6) {
   }, [query]);
 
   const normalizedQuery = debouncedQuery.toLowerCase();
-  const { data = [], isFetching } = useQuery({
+  const { data = [], isFetching, isError } = useQuery({
     queryKey: ["fundSearch", normalizedQuery],
     queryFn: () => searchFunds(debouncedQuery),
     enabled: normalizedQuery.length > 0,
@@ -31,5 +31,6 @@ export function useFundSearch(query: string, limit = 6) {
   return {
     suggestions: normalizedQuery && isCurrentQuery ? data.slice(0, limit) : [],
     isSearching: query.trim().length > 0 && (!isCurrentQuery || isFetching),
+    isError: normalizedQuery.length > 0 && isCurrentQuery && isError,
   };
 }

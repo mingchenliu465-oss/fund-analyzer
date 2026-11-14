@@ -1,6 +1,5 @@
 "use client";
 
-import { useId } from "react";
 import {
   Area,
   AreaChart,
@@ -17,8 +16,6 @@ interface DrawdownChartProps {
 }
 
 export function DrawdownChart({ data }: DrawdownChartProps) {
-  const gradientId = useId();
-
   if (!data || data.length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -30,13 +27,7 @@ export function DrawdownChart({ data }: DrawdownChartProps) {
   return (
     <ResponsiveContainer width="100%" height="100%">
       <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
-        <defs>
-          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#ff3b30" stopOpacity={0.15} />
-            <stop offset="95%" stopColor="#ff3b30" stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--chart-grid)" />
         <XAxis
           dataKey="date"
           axisLine={false}
@@ -55,8 +46,8 @@ export function DrawdownChart({ data }: DrawdownChartProps) {
           contentStyle={{
             background: "var(--background)",
             border: "1px solid var(--border)",
-            borderRadius: "12px",
-            boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
+            borderRadius: "6px",
+            boxShadow: "none",
           }}
           labelStyle={{ color: "var(--muted-foreground)", fontSize: 12 }}
           itemStyle={{ color: "var(--foreground)", fontSize: 13 }}
@@ -65,11 +56,11 @@ export function DrawdownChart({ data }: DrawdownChartProps) {
         <Area
           type="monotone"
           dataKey="drawdown"
-          stroke="#ff3b30"
+          stroke="var(--negative)"
           strokeWidth={2}
-          fill={`url(#${gradientId})`}
+          fill="var(--muted)"
           dot={false}
-          activeDot={{ r: 4, strokeWidth: 0, fill: "#ff3b30" }}
+          activeDot={{ r: 4, strokeWidth: 0, fill: "var(--negative)" }}
         />
       </AreaChart>
     </ResponsiveContainer>
