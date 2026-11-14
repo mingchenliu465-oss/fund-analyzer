@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+/*
+ * 设计 token（全站唯一来源）
+ *
+ * 语义约定（风格统一改造后全站适用）：
+ * - 行情数值（涨跌幅 / 收益率 / 盈亏 / 贡献）的正负颜色用 --rise / --fall，
+ *   遵循 A 股约定：红涨绿跌（与 K 线图 KLINE_UP_COLOR / KLINE_DOWN_COLOR 一致）。
+ * - 状态与质量语义（数据可用、风险低、操作成功/失败）用
+ *   --positive / --negative（绿好红坏），不涉及行情正负。
+ * - 图表分类序列色从 --chart-1..6 按序取用；JS 侧对应 lib/chart-theme.ts，
+ *   两处取值必须保持一致。
+ */
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -11,6 +23,22 @@
   --positive: #00a550;
   --negative: #ff3b30;
   --warning: #ff9500;
+
+  /* 行情涨跌（A 股约定：红涨绿跌）。亮暗主题取值与 negative/positive 一致。 */
+  --rise: #ff3b30;
+  --fall: #00a550;
+
+  /* 图表分类序列配色（多序列图表按序取用） */
+  --chart-1: #0071e3;
+  --chart-2: #5856d6;
+  --chart-3: #af52de;
+  --chart-4: #ff9500;
+  --chart-5: #00a550;
+  --chart-6: #ff3b30;
+
+  /* 圆角规范 */
+  --radius-card: 1rem; /* 16px：卡片 */
+  --radius-control: 0.75rem; /* 12px：按钮 / 输入框 / 小面板 */
 }
 
 @theme inline {
@@ -24,6 +52,16 @@
   --color-positive: var(--positive);
   --color-negative: var(--negative);
   --color-warning: var(--warning);
+  --color-rise: var(--rise);
+  --color-fall: var(--fall);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --radius-card: var(--radius-card);
+  --radius-control: var(--radius-control);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -39,6 +77,17 @@
     --positive: #30d158;
     --negative: #ff453a;
     --warning: #ff9f0a;
+
+    /* 行情涨跌：暗色主题同样红涨绿跌 */
+    --rise: #ff453a;
+    --fall: #30d158;
+
+    --chart-1: #0a84ff;
+    --chart-2: #7d7aff;
+    --chart-3: #da8fff;
+    --chart-4: #ff9f0a;
+    --chart-5: #30d158;
+    --chart-6: #ff453a;
   }
 }
 
