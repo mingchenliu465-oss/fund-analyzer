@@ -250,9 +250,6 @@ export type PortfolioHistoryPeriod = "1W" | "1M" | "3M" | "1Y" | "ALL";
 export interface AttributionContribution {
   fund_type: string;
   current_value: number;
-  nav_stale: boolean;
-  fund_code: string;
-  fund_name: string;
   shares: number;
   nav: number;
   prev_nav: number;
@@ -320,7 +317,6 @@ export interface PortfolioInsights {
     concentration_ratio: number;
     hhi: number;
     concentration_level: string;
-    overlap_status: string;
     overlap_pairs: { fund_a: string; fund_b: string; shared_holdings: string[]; overlap_pct: number; data_as_of: string | null }[];
     notes: string[];
   };
@@ -583,15 +579,17 @@ export async function getMarketStatus(): Promise<MarketStatus> {
 }
 
 // ── 基金类型 → 颜色映射 ──
+// 取值与全站图表调色板（lib/chart-theme.ts / globals.css --chart-*）保持一致，
+// 不再是另一套自创色值。
 
 const TYPE_COLORS: Record<string, string> = {
-  "股票型": "#3b82f6",
-  "混合型": "#8b5cf6",
-  "债券型": "#10b981",
-  "货币型": "#f59e0b",
-  "ETF": "#ef4444",
-  "ETF联接": "#f97316",
-  "QDII": "#06b6d4",
+  "股票型": "#0071e3",
+  "混合型": "#af52de",
+  "债券型": "#00a550",
+  "货币型": "#ff9500",
+  "ETF": "#ff3b30",
+  "ETF联接": "#ffcc00",
+  "QDII": "#5856d6",
 };
 
 function transformPortfolioToOverview(summary: RealPortfolioSummary): PortfolioOverview {
@@ -780,7 +778,7 @@ export async function getReturnRanking(code: string): Promise<ReturnRanking> {
 // ---------------------------------------------------------------------------
 
 /**
- * 把"小数比率"格式化为百分比：0.9802 → "+98.02%"。
+ * 把"小数比率"格式化为百分比：0.9802 → "+98.02%".
  * 只用于 ratio 语义字段（oneYearReturn / volatility / maxDrawdown / alpha / drawdown）。
  */
 export function formatPercent(value: number | null | undefined, digits = 2): string {
@@ -790,7 +788,7 @@ export function formatPercent(value: number | null | undefined, digits = 2): str
 }
 
 /**
- * 把"百分数"字段格式化为百分比：98.02 → "+98.02%"。
+ * 把"百分数"字段格式化为百分比：98.02 → "+98.02%".
  *
  * 后端所有 `*_pct` 字段（total_profit_pct / change_pct / today_return_pct /
  * change_pct / profit_pct）本身就是百分数，必须用这个函数格式化。

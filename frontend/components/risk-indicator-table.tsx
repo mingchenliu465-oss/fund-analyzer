@@ -6,12 +6,13 @@ interface RiskIndicatorTableProps {
   metrics: FundMetrics;
 }
 
+// 百分比统一保留两位小数（全站规范）
 function safeFormatRatio(v: number | null | undefined): string {
   return v != null ? formatRatio(v) : "—";
 }
 
-function safeFormatPercent(v: number | null | undefined, digits = 0): string {
-  return v != null ? formatPercent(v, digits) : "—";
+function safeFormatPercent(v: number | null | undefined): string {
+  return v != null ? formatPercent(v) : "—";
 }
 
 export function RiskIndicatorTable({ metrics }: RiskIndicatorTableProps) {
@@ -25,7 +26,7 @@ export function RiskIndicatorTable({ metrics }: RiskIndicatorTableProps) {
       {items.map((item) => (
         <div
           key={item.label}
-          className="rounded-xl border border-border p-3 transition-colors hover:bg-muted/30"
+          className="rounded-control border border-border p-3 transition-colors hover:bg-muted/30"
         >
           <div className="text-xs text-muted-foreground">{item.label}</div>
           <div className="mt-1 text-lg font-semibold tabular-nums">{item.value}</div>

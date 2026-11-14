@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Modal } from "./ui/modal";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import type { HoldingItem, HoldingCreate, SellFormData } from "@/services/fund";
+import { formatCurrency, type HoldingItem, type HoldingCreate, type SellFormData } from "@/services/fund";
 
 interface TradeModalProps {
   open: boolean;
@@ -92,7 +92,7 @@ export function TradeModal({
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">持仓成本</span>
-            <span className="font-medium">¥{cost.toLocaleString()}</span>
+            <span className="font-medium">{formatCurrency(cost)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">当前净值</span>
@@ -101,7 +101,7 @@ export function TradeModal({
           <div className="flex justify-between">
             <span className="text-muted-foreground">持仓市值</span>
             <span className="font-medium">
-              ¥{(holding.current_value ?? 0).toLocaleString()}
+              {formatCurrency(holding.current_value ?? 0)}
             </span>
           </div>
         </div>
@@ -140,20 +140,18 @@ export function TradeModal({
             />
           </div>
 
-          {/* P&L preview */}
+          {/* P&L preview：盈亏配色遵循 A 股约定（红盈绿亏），用 token 实现，
+              不再硬编码 green-50/red-50 系列类名 */}
           {manualAmount > 0 && cost > 0 && (
             <div
-              className={`rounded-xl p-3 text-center text-sm font-medium ${
+              className={`rounded-control p-3 text-center text-sm font-medium ${
                 realizedProfit >= 0
-                  ? "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300"
-                  : "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300"
+                  ? "bg-rise/10 text-rise"
+                  : "bg-fall/10 text-fall"
               }`}
             >
-              预估实现盈亏：{realizedProfit >= 0 ? "+" : ""}¥
-              {realizedProfit.toLocaleString("zh-CN", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}{" "}
+              预估实现盈亏：{realizedProfit >= 0 ? "+" : ""}
+              {formatCurrency(realizedProfit)}{" "}
               ({realizedProfit >= 0 ? "+" : ""}
               {realizedProfitPct.toFixed(2)}%)
             </div>
@@ -172,7 +170,7 @@ export function TradeModal({
           <Button
             onClick={handleConfirmSell}
             disabled={!sellDate || !sellNav || !sellAmount}
-            className="flex-1 h-10 rounded-xl bg-red-600 text-white hover:bg-red-700"
+            className="flex-1 h-10 rounded-xl bg-negative text-accent-foreground hover:bg-negative/90"
           >
             确认卖出
           </Button>

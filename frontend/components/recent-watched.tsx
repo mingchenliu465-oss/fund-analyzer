@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { FundSummary, formatCurrency, formatPercent } from "@/services/fund";
+import { FundSummary, formatCurrency } from "@/services/fund";
 import { Badge } from "./ui/badge";
-import { TrendingDown, TrendingUp } from "lucide-react";
+import { SignedChange } from "@/components/signed-change";
 
 interface RecentWatchedProps {
   funds: FundSummary[];
@@ -21,11 +21,7 @@ export function RecentWatched({ funds }: RecentWatchedProps) {
 
   return (
     <div className="space-y-3">
-      {funds.map((fund) => {
-        // 涨跌幅缺失时后端返回 null。`?? 0` 会渲染成"上涨箭头 + +0.00%"，
-        // 把"拿不到行情"伪装成一个真实的持平报价。
-        const chg = fund.changePct;
-        return (
+      {funds.map((fund) => (
         <Link
           key={fund.code}
           href={`/fund/${fund.code}`}
@@ -41,26 +37,14 @@ export function RecentWatched({ funds }: RecentWatchedProps) {
           </div>
           <div className="ml-3 text-right">
             <div className="text-sm font-medium tabular-nums">{formatCurrency(fund.nav, 4)}</div>
-            <div
-              className={`inline-flex items-center gap-0.5 text-xs font-medium tabular-nums ${
-                chg == null
-                  ? "text-muted-foreground"
-                  : chg >= 0
-                    ? "text-positive"
-                    : "text-negative"
-              }`}
-            >
-              {chg == null ? null : chg >= 0 ? (
-                <TrendingUp className="h-3 w-3" />
-              ) : (
-                <TrendingDown className="h-3 w-3" />
-              )}
-              {chg == null ? "—" : formatPercent(chg * 0.01)}
+            {/* 涨跌幅缺失时后端返回 null：SignedChange 统一显示「—」，
+                不会伪装成 "上涨箭头 + +0.00%" 的持平报价。 */}
+            <div className="text-xs">
+              <SignedChange value={fund.changePct} />
             </div>
           </div>
         </Link>
-        );
-      })}
+      ))}
     </div>
   );
 }

@@ -13,6 +13,12 @@ import {
   SeriesType,
 } from "lightweight-charts";
 import { KlinePoint, KLINE_UP_COLOR, KLINE_DOWN_COLOR } from "@/services/fund";
+import {
+  CHART_AXIS_TEXT,
+  CHART_GRID,
+  CHART_PRIMARY,
+  MA_COLORS,
+} from "@/lib/chart-theme";
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Props
@@ -59,11 +65,7 @@ const CANDLESTICK_OPTIONS: CandlestickSeriesPartialOptions = {
   wickDownColor: KLINE_DOWN_COLOR,
 };
 
-const MA_COLORS = {
-  ma5: "#ff9500",
-  ma10: "#ffcc00",
-  ma20: "#af52de",
-};
+// MA_COLORS 统一来自 lib/chart-theme（与全站图表配色同一来源）
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Helpers
@@ -148,19 +150,19 @@ export function KLineChart({ data, fundType, chartMode, code, period, chartRange
       height: container.clientHeight,
       layout: {
         background: { color: "transparent" },
-        textColor: "#9ca3af",
+        textColor: CHART_AXIS_TEXT,
       },
       grid: {
-        vertLines: { color: "#e5e7eb", style: 3 },
-        horzLines: { color: "#e5e7eb", style: 3 },
+        vertLines: { color: CHART_GRID, style: 3 },
+        horzLines: { color: CHART_GRID, style: 3 },
       },
       crosshair: { mode: 0 },
       timeScale: {
-        borderColor: "#e5e7eb",
+        borderColor: CHART_GRID,
         timeVisible: false,
       },
       rightPriceScale: {
-        borderColor: "#e5e7eb",
+        borderColor: CHART_GRID,
         autoScale: true,
       },
       localization: { locale: "zh-CN" },
@@ -291,7 +293,7 @@ export function KLineChart({ data, fundType, chartMode, code, period, chartRange
       const lineData = deduped.map((d) => ({ time: d.time, value: d.close }));
 
       const navLine = chart.addSeries(LineSeries, {
-        color: "#0071e3",
+        color: CHART_PRIMARY,
         lineWidth: 2,
         priceLineVisible: false,
         lastValueVisible: true,
@@ -360,7 +362,7 @@ export function KLineChart({ data, fundType, chartMode, code, period, chartRange
           </>
         ) : (
           <>
-            <span style={{ color: "#0071e3", fontWeight: 600 }}>{lineLabel}</span>
+            <span style={{ color: CHART_PRIMARY, fontWeight: 600 }}>{lineLabel}</span>
             <span style={{ color: MA_COLORS.ma5 }}>MA5</span>
             <span style={{ color: MA_COLORS.ma10 }}>MA10</span>
             <span style={{ color: MA_COLORS.ma20 }}>MA20</span>

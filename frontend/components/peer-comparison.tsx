@@ -11,6 +11,11 @@ import {
   YAxis,
 } from "recharts";
 import { type PeerComparison, formatPercent, formatRatio } from "@/services/fund";
+import {
+  CHART_TARGET,
+  RECHARTS_TICK_PROPS,
+  RECHARTS_TOOLTIP_STYLE,
+} from "@/lib/chart-theme";
 
 interface PeerComparisonProps {
   data: PeerComparison[];
@@ -36,7 +41,7 @@ export function PeerComparison({ data, targetCode }: PeerComparisonProps) {
               dataKey="name"
               axisLine={false}
               tickLine={false}
-              tick={{ fill: "var(--muted-foreground)", fontSize: 11 }}
+              tick={RECHARTS_TICK_PROPS}
               dy={8}
               interval={0}
               angle={0}
@@ -45,16 +50,11 @@ export function PeerComparison({ data, targetCode }: PeerComparisonProps) {
             <YAxis
               axisLine={false}
               tickLine={false}
-              tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+              tick={RECHARTS_TICK_PROPS}
               tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
             />
             <Tooltip
-              contentStyle={{
-                background: "var(--background)",
-                border: "1px solid var(--border)",
-                borderRadius: "12px",
-                boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
-              }}
+              contentStyle={RECHARTS_TOOLTIP_STYLE}
               itemStyle={{ color: "var(--foreground)", fontSize: 13 }}
               formatter={(value) => [formatPercent(typeof value === "number" ? value : 0), "近一年收益"]}
             />
@@ -62,7 +62,7 @@ export function PeerComparison({ data, targetCode }: PeerComparisonProps) {
               {data.map((entry) => (
                 <Cell
                   key={entry.code}
-                  fill={entry.code === targetCode ? "#171717" : "var(--border)"}
+                  fill={entry.code === targetCode ? CHART_TARGET : "var(--border)"}
                 />
               ))}
             </Bar>
@@ -97,7 +97,7 @@ export function PeerComparison({ data, targetCode }: PeerComparisonProps) {
                 <td className="py-2.5 text-muted-foreground">{item.type}</td>
                 <td
                   className={`py-2.5 text-right font-medium ${
-                    item.oneYearReturn >= 0 ? "text-positive" : "text-negative"
+                    item.oneYearReturn >= 0 ? "text-rise" : "text-fall"
                   }`}
                 >
                   {formatPercent(item.oneYearReturn)}

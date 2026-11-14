@@ -1,7 +1,7 @@
 "use client";
 
-import { TrendingDown, TrendingUp } from "lucide-react";
-import { TopHolding, formatPercent } from "@/services/fund";
+import { TopHolding } from "@/services/fund";
+import { SignedChange } from "@/components/signed-change";
 
 interface TopHoldingsTableProps {
   holdings: TopHolding[];
@@ -31,27 +31,9 @@ export function TopHoldingsTable({ holdings }: TopHoldingsTableProps) {
               <td className="py-2.5 text-muted-foreground">{item.code || "—"}</td>
               <td className="py-2.5 text-muted-foreground">{assetType}</td>
               <td className="py-2.5 text-right tabular-nums">{item.weight}%</td>
-              <td
-                className={`py-2.5 text-right font-medium tabular-nums ${
-                  item.changePct == null
-                    ? "text-muted-foreground"
-                    : item.changePct >= 0
-                      ? "text-positive"
-                      : "text-negative"
-                }`}
-              >
-                {item.changePct == null ? (
-                  <span className="text-muted-foreground">—</span>
-                ) : (
-                  <span className="inline-flex items-center gap-1">
-                    {item.changePct >= 0 ? (
-                      <TrendingUp className="h-3 w-3" />
-                    ) : (
-                      <TrendingDown className="h-3 w-3" />
-                    )}
-                    {formatPercent(item.changePct * 0.01)}
-                  </span>
-                )}
+              {/* 日涨跌统一用 SignedChange：红涨绿跌、缺失显示「—」 */}
+              <td className="py-2.5 text-right tabular-nums">
+                <SignedChange value={item.changePct} />
               </td>
             </tr>
             );

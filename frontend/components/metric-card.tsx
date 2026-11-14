@@ -22,11 +22,12 @@ export function MetricCard({
   icon: Icon,
   delay = 0,
 }: MetricCardProps) {
+  // 趋势配色遵循 A 股约定：up=红（rise），down=绿（fall），与 K 线图一致。
   const trendColor =
     trend === "up"
-      ? "text-positive"
+      ? "text-rise"
       : trend === "down"
-      ? "text-negative"
+      ? "text-fall"
       : "text-muted-foreground";
 
   return (
@@ -34,7 +35,7 @@ export function MetricCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay, ease: [0.23, 1, 0.32, 1] }}
-      className="group relative overflow-hidden rounded-3xl border border-border bg-background p-6 transition-shadow hover:shadow-lg"
+      className="group relative overflow-hidden rounded-card border border-border bg-background p-6 transition-shadow hover:shadow-lg"
     >
       <div className="mb-4 flex items-center justify-between">
         <span className="text-sm font-medium text-muted-foreground">{title}</span>

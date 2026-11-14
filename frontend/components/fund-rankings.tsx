@@ -62,8 +62,8 @@ export function FundRankings({ funds }: FundRankingsProps) {
                   ret == null
                     ? "text-muted-foreground"
                     : ret >= 0
-                      ? "text-positive"
-                      : "text-negative"
+                      ? "text-rise"
+                      : "text-fall"
                 }`}
               >
                 {formatPercent(ret)}
