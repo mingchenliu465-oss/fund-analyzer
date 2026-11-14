@@ -60,9 +60,9 @@ const CANDLESTICK_OPTIONS: CandlestickSeriesPartialOptions = {
 };
 
 const MA_COLORS = {
-  ma5: "#ff9500",
-  ma10: "#ffcc00",
-  ma20: "#af52de",
+  ma5: "#1f5fbf",
+  ma10: "#6b7280",
+  ma20: "#171717",
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -198,7 +198,7 @@ export function KLineChart({ data, fundType, chartMode, code, period, chartRange
     const currentYear = new Date().getFullYear();
 
     // Normalize + validate OHLC data
-    const raw: { time: Time; open: number; high: number; low: number; close: number; _epoch: number; _volume: number }[] = [];
+    const raw: { time: Time; open: number; high: number; low: number; close: number; _epoch: number; _volume: number | null }[] = [];
     for (const point of data) {
       const date = normalizeDate(point.date, currentYear);
       if (!date) continue;
@@ -211,7 +211,7 @@ export function KLineChart({ data, fundType, chartMode, code, period, chartRange
         low: point.low,
         close: point.close,
         _epoch: epoch,
-        _volume: point.volume ?? 0,
+        _volume: point.volume ?? null,
       });
     }
 
@@ -248,13 +248,17 @@ export function KLineChart({ data, fundType, chartMode, code, period, chartRange
       seriesRefs.current.push(candleSeries);
 
       // 成交量柱状图（红涨绿跌，半透明）
-      const volumeData = candles.map((c, i) => ({
-        time: c.time,
-        value: deduped[i]._volume,
-        color: (i > 0 ? closes[i] >= closes[i - 1] : true)
-          ? KLINE_UP_COLOR + "66"
-          : KLINE_DOWN_COLOR + "66",
-      }));
+      const volumeData = candles.flatMap((c, i) => {
+        const volume = deduped[i]._volume;
+        if (volume == null) return [];
+        return [{
+          time: c.time,
+          value: volume,
+          color: (i > 0 ? closes[i] >= closes[i - 1] : true)
+            ? KLINE_UP_COLOR + "66"
+            : KLINE_DOWN_COLOR + "66",
+        }];
+      });
       const volumeSeries = chart.addSeries(HistogramSeries, {
         priceFormat: { type: "volume" },
         priceScaleId: "volume",
@@ -291,7 +295,7 @@ export function KLineChart({ data, fundType, chartMode, code, period, chartRange
       const lineData = deduped.map((d) => ({ time: d.time, value: d.close }));
 
       const navLine = chart.addSeries(LineSeries, {
-        color: "#0071e3",
+        color: "#1f5fbf",
         lineWidth: 2,
         priceLineVisible: false,
         lastValueVisible: true,
@@ -351,7 +355,7 @@ export function KLineChart({ data, fundType, chartMode, code, period, chartRange
       <div ref={containerRef} className="h-full w-full" />
 
       {/* Legend */}
-      <div className="pointer-events-none absolute left-2 top-2 z-10 flex gap-3 rounded bg-background/80 px-2 py-1 text-[11px] backdrop-blur-sm">
+      <div className="pointer-events-none absolute left-2 top-2 z-10 flex gap-3 rounded bg-background px-2 py-1 text-[11px]">
         {isETF ? (
           <>
             <span style={{ color: MA_COLORS.ma5 }}>MA5</span>
@@ -360,7 +364,7 @@ export function KLineChart({ data, fundType, chartMode, code, period, chartRange
           </>
         ) : (
           <>
-            <span style={{ color: "#0071e3", fontWeight: 600 }}>{lineLabel}</span>
+            <span style={{ color: "#1f5fbf", fontWeight: 600 }}>{lineLabel}</span>
             <span style={{ color: MA_COLORS.ma5 }}>MA5</span>
             <span style={{ color: MA_COLORS.ma10 }}>MA10</span>
             <span style={{ color: MA_COLORS.ma20 }}>MA20</span>
