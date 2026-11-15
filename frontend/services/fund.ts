@@ -969,6 +969,27 @@ export async function getReturnRanking(code: string): Promise<ReturnRanking> {
   );
 }
 
+export interface ProviderStatus {
+  name: string;
+  label: string;
+  status: "available" | "blocked" | string;
+  enabled: boolean;
+  capabilities: string[];
+  detail: string;
+}
+
+export interface ProviderRegistryStatus {
+  activeProvider: string;
+  providers: ProviderStatus[];
+  fundAccumulatedNavStatus: string;
+  fundAccumulatedNavDetail: string;
+  generatedAt: string;
+}
+
+export async function getProviderRegistryStatus(): Promise<ProviderRegistryStatus> {
+  return fetchJson<ProviderRegistryStatus>("/api/providers/status");
+}
+
 // ---------------------------------------------------------------------------
 // 诚实回测：字段与后端结构化报告逐一对齐，不在传输层改变金融口径。
 // ---------------------------------------------------------------------------

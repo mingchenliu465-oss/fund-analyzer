@@ -10,8 +10,9 @@ import logging
 import pandas as pd
 
 from models.analysis import ResearchPeriod
-from models.market import NavPeriod
-from services import alignment, fund_service, market_service
+from services import alignment, fund_service, market_data, market_service
+
+# market_service 保留为现有测试与 AkShare Adapter 的兼容接缝；实际选择由 market_data 负责。
 
 logger = logging.getLogger(__name__)
 
@@ -130,19 +131,17 @@ def overview(code: str, period: ResearchPeriod, as_of: date | None = None) -> di
     curve: list[dict] = []
     benchmark_frame = pd.DataFrame(columns=["净值日期", "close"])
     try:
-        points = market_service.index_kline(REFERENCE_BENCHMARK, NavPeriod.DAILY)
-        if points:
-            benchmark_frame = pd.DataFrame(
-                [{"净值日期": point.date, "close": point.close} for point in points]
-            )
-            benchmark_frame["净值日期"] = pd.to_datetime(
-                benchmark_frame["净值日期"], errors="coerce"
-            )
-            benchmark_frame["close"] = pd.to_numeric(benchmark_frame["close"], errors="coerce")
-            benchmark_frame = benchmark_frame.dropna()
-            benchmark_frame = benchmark_frame[benchmark_frame["close"] > 0]
-            if cutoff is not None:
-                benchmark_frame = benchmark_frame[benchmark_frame["净值日期"] >= cutoff]
+        benchmark_history = market_data.history_with_fallback(
+            "000300.SH",
+            cutoff.date() if cutoff is not None else date(1990, 1, 1),
+            today,
+        )
+        benchmark_frame = benchmark_history.frame
+        benchmark["source"] = benchmark_history.source
+        if benchmark_history.fallback_from:
+            # 降级原因与实际来源同时进入响应，不能继续声称使用了 iFinD。
+            quality_notes.append(benchmark_history.note)
+            benchmark["note"] += f" {benchmark_history.note}"
     except Exception as exc:  # 基准失败不应抹掉已经真实可得的基金指标
         logger.warning("Overview benchmark unavailable for %s: %s", code, type(exc).__name__)
 

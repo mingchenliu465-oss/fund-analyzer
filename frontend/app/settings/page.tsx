@@ -1,9 +1,11 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { DataState, PageHeader, ResearchSection, SourceNote } from "@/components/research-ui";
+import { DataState, KeyValueList, PageHeader, ResearchSection, SourceNote } from "@/components/research-ui";
+import { getProviderRegistryStatus } from "@/services/fund";
 import {
   DEFAULT_RESEARCH_PREFERENCES,
   RESEARCH_PERIODS,
@@ -26,6 +28,12 @@ export default function SettingsPage() {
   const [defaultPeriod, setDefaultPeriod] = useState<ResearchPeriod>(DEFAULT_RESEARCH_PREFERENCES.defaultPeriod);
   const [ready, setReady] = useState(false);
   const [saved, setSaved] = useState(false);
+  const providers = useQuery({
+    queryKey: ["providerRegistryStatus"],
+    queryFn: getProviderRegistryStatus,
+    staleTime: 60 * 1000,
+    retry: 0,
+  });
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -86,6 +94,28 @@ export default function SettingsPage() {
           <SourceNote>清除浏览器站点数据会移除这些偏好。颜色遵循中国市场红涨绿跌，不提供可能混淆风险语义的自定义涨跌色。</SourceNote>
         </ResearchSection>
       )}
+
+      <ResearchSection title="数据源与增强状态" description="这里显示服务端真实配置，不代表当前会话插件或官方完整产品的全部能力。">
+        {providers.isPending && <DataState kind="loading" title="正在读取 Provider 状态" />}
+        {providers.isError && <DataState kind="error" title="Provider 状态暂时不可用" description={providers.error instanceof Error ? providers.error.message : "请稍后重试。"} action={<Button variant="outline" onClick={() => void providers.refetch()}>重新加载</Button>} />}
+        {providers.data && (
+          <>
+            <DataState
+              kind={providers.data.fundAccumulatedNavStatus === "blocked" ? "unsupported" : "success"}
+              title={`iFinD 基金累计净值：${providers.data.fundAccumulatedNavStatus === "blocked" ? "Blocked" : providers.data.fundAccumulatedNavStatus}`}
+              description={providers.data.fundAccumulatedNavDetail}
+            />
+            <KeyValueList items={providers.data.providers.map((provider) => ({
+              label: provider.label,
+              value: provider.status === "available" ? "可用" : provider.status === "blocked" ? "Blocked" : provider.status,
+              note: provider.detail,
+            }))} />
+            <SourceNote>
+              当前实际主 Provider：{providers.data.activeProvider}。状态生成时间：{new Date(providers.data.generatedAt).toLocaleString("zh-CN")}。iFinD 凭据只从服务端环境读取，不会返回浏览器。
+            </SourceNote>
+          </>
+        )}
+      </ResearchSection>
     </div>
   );
 }
