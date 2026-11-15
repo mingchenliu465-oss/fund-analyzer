@@ -249,6 +249,7 @@ def run_backtest(
         f"参数纪律：只使用产品预设的 {len(PRESET_THRESHOLDS)} 档阈值 × {len(PRESET_HOLD_MONTHS)} 档持有期"
         f" = {len(PRESET_THRESHOLDS) * len(PRESET_HOLD_MONTHS)} 种组合，从不用本基金数据拟合挑选，6 种结果全部列示。",
         f"样本外：前 {warmup_days} 个交易日为预热段（供回撤窗口取历史高点），不进入任何结论指标；结论只认其后的样本外评估段。",
+        "验证边界：本报告不是滚动样本外或 walk-forward 测试；“样本外”仅指固定产品预设参数在预热后的历史评估段，未针对本基金拟合参数，也未逐期重新训练。",
         "参数判定规则（结论）：评估段不足 3 年或完成交易不足 3 笔 → 证据不足；样本外总超额 > 0 且跑赢年份过半 → 成立；否则 → 不成立。",
         f"费用-申购费率 {fees.subscription_rate:.2%}：{SUBSCRIPTION_FEE_LABEL}。",
         f"费用-赎回费（持有 <7 日）{0.015:.2%}：{REDEMPTION_LT7_LABEL}。",

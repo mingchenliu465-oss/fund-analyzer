@@ -970,6 +970,113 @@ export async function getReturnRanking(code: string): Promise<ReturnRanking> {
 }
 
 // ---------------------------------------------------------------------------
+// 诚实回测：字段与后端结构化报告逐一对齐，不在传输层改变金融口径。
+// ---------------------------------------------------------------------------
+
+export interface BacktestTrade {
+  buy_date: string;
+  buy_nav: number;
+  sell_date: string | null;
+  sell_nav: number | null;
+  holding_days: number | null;
+  buy_fee: number;
+  sell_fee: number | null;
+  return_pct: number | null;
+  open: boolean;
+}
+
+export interface BacktestYearRow {
+  year: number;
+  strategy_return: number;
+  benchmark_return: number;
+  excess_return: number;
+  strategy_max_drawdown: number;
+  strategy_volatility: number | null;
+  failed: boolean;
+}
+
+export interface BacktestCombo {
+  threshold: number;
+  hold_months: number;
+  total_return: number;
+  benchmark_return: number;
+  excess_return: number;
+  max_drawdown: number;
+  volatility: number | null;
+  completed_trades: number;
+  open_trades: number;
+  trades: BacktestTrade[];
+  yearly: BacktestYearRow[];
+  failed_years: number[];
+  conclusion: string;
+  conclusion_reason: string;
+  equity_monthly: {
+    dates: string[];
+    strategy: number[];
+    benchmark: number[];
+  };
+}
+
+export interface BacktestReport {
+  code: string;
+  name: string;
+  status: "ok" | "refused";
+  refusal_reason: string | null;
+  data_start: string | null;
+  data_end: string | null;
+  eval_start: string | null;
+  warmup_days: number;
+  combos: BacktestCombo[];
+  disclosures: string[];
+}
+
+export function countConclusions(combos: Pick<BacktestCombo, "conclusion">[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const combo of combos) {
+    counts[combo.conclusion] = (counts[combo.conclusion] ?? 0) + 1;
+  }
+  return counts;
+}
+
+export function plainBacktestSummary(counts: Record<string, number>, total: number): string {
+  const ok = counts["成立"] ?? 0;
+  const fail = counts["不成立"] ?? 0;
+  const insuff = counts["证据不足"] ?? 0;
+  const base = `这条「跌多了买」的规则，在这只基金上共检验了 ${total} 种搭配：${ok} 种成立、${fail} 种不成立、${insuff} 种证据不足。`;
+  if (total > 0 && ok === total) return `${base}每种搭配都跑赢了买入持有。`;
+  if (ok === 0 && fail > 0) return `${base}没有一种搭配跑赢买入持有——这条规则在这只基金上没通过检验。`;
+  return base;
+}
+
+function extractApiDetail(err: unknown): string {
+  if (err instanceof Error) {
+    const match = err.message.match(/\{[\s\S]*\}/);
+    if (match) {
+      try {
+        const parsed = JSON.parse(match[0]) as { detail?: unknown };
+        if (typeof parsed.detail === "string" && parsed.detail) return parsed.detail;
+      } catch {
+        // 非 JSON 错误保留原始信息。
+      }
+    }
+    return err.message;
+  }
+  return "请求失败，请稍后重试";
+}
+
+export async function getBacktestReport(code: string): Promise<BacktestReport> {
+  try {
+    return await fetchJson<BacktestReport>(
+      `/api/backtest/${encodeURIComponent(code.trim().toUpperCase())}`,
+      undefined,
+      120000
+    );
+  } catch (err) {
+    throw new Error(extractApiDetail(err));
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Formatting helpers (presentational but commonly used alongside service data)
 // ---------------------------------------------------------------------------
 
