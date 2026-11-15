@@ -11,6 +11,8 @@
  * automatically via next.config.ts, so the default empty API base works.
  */
 
+import { CHART_FALL, CHART_RISE } from "../lib/chart-theme";
+
 export interface FundSummary {
   code: string;
   name: string;
@@ -369,8 +371,8 @@ export interface SellFormData {
 export type NavPeriod = "5D" | "10D" | "20D" | "日K" | "周K" | "月K" | "年K" | "1M" | "3M" | "6M" | "1Y" | "3Y";
 
 // Chinese market convention: up = red, down = green.
-export const KLINE_UP_COLOR = "#ff3b30";
-export const KLINE_DOWN_COLOR = "#00a550";
+export const KLINE_UP_COLOR = CHART_RISE;
+export const KLINE_DOWN_COLOR = CHART_FALL;
 
 // ---------------------------------------------------------------------------
 // API base

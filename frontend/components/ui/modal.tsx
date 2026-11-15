@@ -44,7 +44,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/40"
             onClick={onClose}
           />
 
@@ -54,14 +54,18 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 16 }}
             transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-            className="relative z-10 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-background p-5 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-title"
+            className="relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-md border border-border bg-background p-5"
           >
             {/* Header */}
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-semibold">{title}</h3>
+              <h3 id="modal-title" className="text-lg font-semibold">{title}</h3>
               <button
                 onClick={onClose}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted transition-colors"
+                aria-label="关闭弹窗"
+                className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted"
               >
                 <X className="h-4 w-4" />
               </button>

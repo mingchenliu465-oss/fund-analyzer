@@ -1,77 +1,44 @@
-"use client";
-
 import Link from "next/link";
 import { FundSummary, formatPercent } from "@/services/fund";
-import { Badge } from "./ui/badge";
+import { DataState } from "./research-ui";
 
-interface FundRankingsProps {
-  funds: FundSummary[];
-}
-
-export function FundRankings({ funds }: FundRankingsProps) {
+export function FundRankings({ funds }: { funds: FundSummary[] }) {
   if (funds.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
-        <p className="text-sm">暂无排行数据</p>
-        <p className="mt-1 text-xs">数据源暂时不可用，请稍后重试</p>
-      </div>
-    );
+    return <DataState kind="empty" title="暂无排行数据" description="数据源暂时不可用，未使用替代数据。" />;
   }
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="data-table">
         <thead>
-          <tr className="border-b border-border text-left text-muted-foreground">
-            <th className="px-3 py-2 font-medium">排名</th>
-            <th className="px-3 py-2 font-medium">基金名称</th>
-            <th className="px-3 py-2 font-medium">代码</th>
-            <th className="px-3 py-2 font-medium">类型</th>
-            <th className="px-3 py-2 text-right font-medium">近一年收益</th>
-            <th className="px-3 py-2 text-right font-medium">风险等级</th>
+          <tr>
+            <th>排名</th>
+            <th>基金名称</th>
+            <th className="hidden sm:table-cell">代码</th>
+            <th className="hidden md:table-cell">类型</th>
+            <th className="numeric">近一年收益</th>
+            <th className="numeric hidden sm:table-cell">风险等级</th>
           </tr>
         </thead>
         <tbody>
           {funds.map((fund, index) => {
-            // 近一年收益在历史不足一年时后端返回 null。绝不能 `?? 0`：
-            // 那会把"算不出来"渲染成绿色的 "+0.00%" —— 一个看起来真实的收益数字。
             const ret = fund.oneYearReturn;
             return (
-            <tr
-              key={fund.code || `fund-${index}`}
-              className="border-b border-border last:border-0 transition-colors hover:bg-muted/40"
-            >
-              <td className="px-3 py-2.5">
-                <span
-                  className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-semibold ${
-                    index < 3 ? "bg-foreground text-background" : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {index + 1}
-                </span>
-              </td>
-              <td className="px-3 py-2.5">
-                <Link href={`/fund/${fund.code}`} className="font-medium hover:text-accent">
-                  {fund.name ?? "—"}
-                </Link>
-              </td>
-              <td className="px-3 py-2.5 text-muted-foreground">{fund.code}</td>
-              <td className="px-3 py-2.5 text-muted-foreground">{fund.type ?? "—"}</td>
-              <td
-                className={`px-3 py-2.5 text-right font-medium tabular-nums ${
-                  ret == null
-                    ? "text-muted-foreground"
-                    : ret >= 0
-                      ? "text-positive"
-                      : "text-negative"
-                }`}
-              >
-                {formatPercent(ret)}
-              </td>
-              <td className="px-3 py-2.5 text-right">
-                <Badge variant="outline">{fund.riskLevel ?? "—"}</Badge>
-              </td>
-            </tr>
+              <tr key={fund.code || `fund-${index}`}>
+                <td className="numeric text-muted-foreground">{index + 1}</td>
+                <td>
+                  <Link href={`/fund/${fund.code}`} className="font-medium hover:text-accent">
+                    {fund.name ?? "—"}
+                  </Link>
+                  <span className="mt-0.5 block text-xs text-muted-foreground sm:hidden">{fund.code}</span>
+                </td>
+                <td className="hidden text-muted-foreground sm:table-cell">{fund.code}</td>
+                <td className="hidden text-muted-foreground md:table-cell">{fund.type ?? "—"}</td>
+                <td className={`numeric font-semibold ${ret == null ? "text-muted-foreground" : ret >= 0 ? "text-positive" : "text-negative"}`}>
+                  {formatPercent(ret)}
+                </td>
+                <td className="numeric hidden sm:table-cell">{fund.riskLevel ?? "—"}</td>
+              </tr>
             );
           })}
         </tbody>

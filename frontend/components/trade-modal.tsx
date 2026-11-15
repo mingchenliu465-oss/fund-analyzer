@@ -85,14 +85,14 @@ export function TradeModal({
     return (
       <Modal open={open} onClose={onClose} title="卖出持仓">
         {/* Holding context */}
-        <div className="mb-4 rounded-xl border border-border bg-muted/30 p-3 space-y-1.5 text-sm">
+        <div className="mb-5 space-y-1.5 border-y border-border py-3 text-sm">
           <div className="flex justify-between">
             <span className="text-muted-foreground">基金</span>
             <span className="font-medium">{holding.fund_name}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">持仓成本</span>
-            <span className="font-medium">¥{cost.toLocaleString()}</span>
+            <span className="font-medium">{holding.cost != null ? `¥${holding.cost.toLocaleString()}` : "—"}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">当前净值</span>
@@ -101,7 +101,7 @@ export function TradeModal({
           <div className="flex justify-between">
             <span className="text-muted-foreground">持仓市值</span>
             <span className="font-medium">
-              ¥{(holding.current_value ?? 0).toLocaleString()}
+              {holding.current_value != null ? `¥${holding.current_value.toLocaleString()}` : "—"}
             </span>
           </div>
         </div>
@@ -114,7 +114,7 @@ export function TradeModal({
               type="date"
               value={sellDate}
               onChange={(e) => setSellDate(e.target.value)}
-              className="mt-1 h-10 rounded-xl"
+              className="mt-1"
             />
           </div>
           <div>
@@ -125,7 +125,7 @@ export function TradeModal({
               value={sellNav}
               onChange={(e) => handleSellNavChange(e.target.value)}
               placeholder="自动填入当前净值"
-              className="mt-1 h-10 rounded-xl"
+              className="mt-1"
             />
           </div>
           <div>
@@ -136,17 +136,15 @@ export function TradeModal({
               value={sellAmount}
               onChange={(e) => setSellAmount(e.target.value)}
               placeholder={`自动计算: ${sharesNum} 份 × ${sellNavNum} 净值`}
-              className="mt-1 h-10 rounded-xl"
+              className="mt-1"
             />
           </div>
 
           {/* P&L preview */}
-          {manualAmount > 0 && cost > 0 && (
+          {manualAmount > 0 && holding.cost != null && cost > 0 && (
             <div
-              className={`rounded-xl p-3 text-center text-sm font-medium ${
-                realizedProfit >= 0
-                  ? "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300"
-                  : "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300"
+              className={`border-y border-border py-3 text-center text-sm font-medium ${
+                realizedProfit >= 0 ? "text-positive" : "text-negative"
               }`}
             >
               预估实现盈亏：{realizedProfit >= 0 ? "+" : ""}¥
@@ -165,14 +163,14 @@ export function TradeModal({
           <Button
             variant="outline"
             onClick={onClose}
-            className="flex-1 h-10 rounded-xl"
+            className="flex-1"
           >
             取消
           </Button>
           <Button
             onClick={handleConfirmSell}
             disabled={!sellDate || !sellNav || !sellAmount}
-            className="flex-1 h-10 rounded-xl bg-red-600 text-white hover:bg-red-700"
+            className="flex-1"
           >
             确认卖出
           </Button>
@@ -185,7 +183,7 @@ export function TradeModal({
   return (
     <Modal open={open} onClose={onClose} title="编辑持仓">
       <div className="space-y-3">
-        <div className="rounded-xl border border-border bg-muted/30 p-3 text-sm">
+        <div className="border-y border-border py-3 text-sm">
           <span className="text-muted-foreground">基金：</span>
           <span className="font-medium">{holding.fund_name}</span>
           <span className="ml-2 text-xs text-muted-foreground">{holding.fund_code}</span>
@@ -197,7 +195,7 @@ export function TradeModal({
             type="date"
             value={buyDate}
             onChange={(e) => setBuyDate(e.target.value)}
-            className="mt-1 h-10 rounded-xl"
+            className="mt-1"
           />
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -208,7 +206,7 @@ export function TradeModal({
               step="0.01"
               value={buyAmount}
               onChange={(e) => setBuyAmount(e.target.value)}
-              className="mt-1 h-10 rounded-xl"
+              className="mt-1"
             />
           </div>
           <div>
@@ -218,7 +216,7 @@ export function TradeModal({
               step="0.0001"
               value={buyNav}
               onChange={(e) => setBuyNav(e.target.value)}
-              className="mt-1 h-10 rounded-xl"
+              className="mt-1"
             />
           </div>
           <div>
@@ -228,7 +226,7 @@ export function TradeModal({
               step="0.01"
               value={shares}
               onChange={(e) => setShares(e.target.value)}
-              className="mt-1 h-10 rounded-xl"
+              className="mt-1"
             />
           </div>
           <div>
@@ -238,7 +236,7 @@ export function TradeModal({
               step="0.01"
               value={fee}
               onChange={(e) => setFee(e.target.value)}
-              className="mt-1 h-10 rounded-xl"
+              className="mt-1"
             />
           </div>
         </div>
@@ -248,7 +246,7 @@ export function TradeModal({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="可选"
-            className="mt-1 h-10 rounded-xl"
+            className="mt-1"
           />
         </div>
       </div>
@@ -257,14 +255,14 @@ export function TradeModal({
         <Button
           variant="outline"
           onClick={onClose}
-          className="flex-1 h-10 rounded-xl"
+          className="flex-1"
         >
           取消
         </Button>
         <Button
           onClick={handleConfirmEdit}
           disabled={!buyDate || !buyAmount || !buyNav || !shares}
-          className="flex-1 h-10 rounded-xl bg-foreground text-background hover:bg-foreground/90"
+          className="flex-1"
         >
           保存修改
         </Button>

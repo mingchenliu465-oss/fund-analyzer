@@ -52,8 +52,8 @@ export function PeerComparison({ data, targetCode }: PeerComparisonProps) {
               contentStyle={{
                 background: "var(--background)",
                 border: "1px solid var(--border)",
-                borderRadius: "12px",
-                boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
+                borderRadius: "6px",
+                boxShadow: "none",
               }}
               itemStyle={{ color: "var(--foreground)", fontSize: 13 }}
               formatter={(value) => [formatPercent(typeof value === "number" ? value : 0), "近一年收益"]}
@@ -62,7 +62,7 @@ export function PeerComparison({ data, targetCode }: PeerComparisonProps) {
               {data.map((entry) => (
                 <Cell
                   key={entry.code}
-                  fill={entry.code === targetCode ? "#171717" : "var(--border)"}
+                  fill={entry.code === targetCode ? "var(--accent)" : "var(--border)"}
                 />
               ))}
             </Bar>
@@ -71,7 +71,7 @@ export function PeerComparison({ data, targetCode }: PeerComparisonProps) {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="data-table min-w-[720px]">
           <thead>
             <tr className="border-b border-border text-left text-muted-foreground">
               <th className="py-2 font-medium">基金</th>

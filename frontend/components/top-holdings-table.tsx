@@ -10,7 +10,7 @@ interface TopHoldingsTableProps {
 export function TopHoldingsTable({ holdings }: TopHoldingsTableProps) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="data-table min-w-[620px]">
         <thead>
           <tr className="border-b border-border text-left text-muted-foreground">
             <th className="py-2 font-medium">重仓方向</th>
