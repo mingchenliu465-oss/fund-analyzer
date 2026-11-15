@@ -1,3 +1,5 @@
+from enum import Enum
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -111,3 +113,64 @@ class HoldStructure(BaseModel):
     """全市场机构/个人持有比例趋势（非单只基金数据）。"""
     points: list[HoldStructurePoint]
     note: str  # 说明这是全市场数据
+
+
+class ResearchPeriod(str, Enum):
+    """研究页独立周期；不向旧 NavPeriod 添加值，避免破坏旧接口。"""
+
+    ONE_MONTH = "1m"
+    THREE_MONTH = "3m"
+    SIX_MONTH = "6m"
+    ONE_YEAR = "1y"
+    THREE_YEAR = "3y"
+    ALL = "all"
+
+
+class OverviewMetrics(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    period_return: float | None = Field(default=None, alias="periodReturn")
+    volatility: float | None = None
+    max_drawdown: float | None = Field(default=None, alias="maxDrawdown")
+    sharpe: float | None = None
+
+
+class OverviewCurvePoint(BaseModel):
+    date: str
+    fund: float
+    benchmark: float | None = None
+
+
+class BenchmarkComparison(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    code: str
+    name: str
+    status: str
+    source: str
+    period_return: float | None = Field(default=None, alias="periodReturn")
+    matched_samples: int = Field(alias="matchedSamples")
+    fund_only_dates: int = Field(alias="fundOnlyDates")
+    benchmark_only_dates: int = Field(alias="benchmarkOnlyDates")
+    note: str
+
+
+class FundOverview(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    code: str
+    name: str
+    period: ResearchPeriod
+    data_start: str | None = Field(default=None, alias="dataStart")
+    data_end: str | None = Field(default=None, alias="dataEnd")
+    sample_count: int = Field(alias="sampleCount")
+    metric_status: str = Field(alias="metricStatus")
+    metrics: OverviewMetrics
+    curve: list[OverviewCurvePoint]
+    benchmark: BenchmarkComparison
+    quality_status: str = Field(alias="qualityStatus")
+    quality_notes: list[str] = Field(alias="qualityNotes")
+    duplicate_dates: int = Field(alias="duplicateDates")
+    invalid_nav_records: int = Field(alias="invalidNavRecords")
+    source: str
+    generated_at: str = Field(alias="generatedAt")

@@ -494,6 +494,157 @@ select:focus-visible {
   margin: 8px 0;
 }
 
+.overview-controls {
+  display: grid;
+  gap: 18px;
+  margin-bottom: 26px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-surface);
+  background: var(--surface);
+}
+
+.overview-fund-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: end;
+}
+
+.overview-fund-form > label {
+  grid-column: 1 / -1;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.overview-search-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.overview-search-field {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--muted-foreground);
+}
+
+.overview-search-field:focus-within {
+  border-color: var(--accent);
+}
+
+.overview-search-field input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--foreground);
+}
+
+.overview-suggestions {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  left: 0;
+  width: min(100%, 420px);
+  min-width: 280px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgb(23 32 51 / 12%);
+}
+
+.overview-suggestions > p {
+  margin: 0;
+  padding: 14px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.overview-suggestions button {
+  display: flex;
+  width: 100%;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  text-align: left;
+}
+
+.overview-suggestions button:hover,
+.overview-suggestions button:focus-visible {
+  background: var(--surface-secondary);
+}
+
+.overview-suggestions strong,
+.overview-suggestions small {
+  display: block;
+}
+
+.overview-suggestions small {
+  margin-top: 3px;
+  color: var(--muted-foreground);
+}
+
+.field-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--negative);
+  font-size: 12px;
+}
+
+.overview-controls .segmented-control {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  width: 100%;
+}
+
+.overview-controls .segmented-control button {
+  min-width: 0;
+}
+
+.overview-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 32px;
+}
+
+.overview-evidence-grid .key-value-row {
+  align-items: flex-start;
+}
+
+.overview-evidence-grid .key-value-row dd {
+  max-width: 62%;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.overview-evidence-grid .data-state {
+  min-height: 120px;
+  margin-bottom: 14px;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.quality-note-list {
+  margin: 16px 0 0;
+  padding-left: 18px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.8;
+}
+
 @media (min-width: 1024px) {
   .app-main {
     padding-left: var(--sidebar-width);
@@ -588,6 +739,32 @@ select:focus-visible {
 
   .chart-frame {
     height: 270px;
+  }
+
+  .overview-controls {
+    padding: 14px;
+  }
+
+  .overview-fund-form {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-fund-form > label,
+  .field-error {
+    grid-column: 1;
+  }
+
+  .overview-controls .segmented-control {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .overview-evidence-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .overview-evidence-grid .key-value-row dd {
+    max-width: 58%;
   }
 
   .allocation-row {

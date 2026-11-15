@@ -12,6 +12,7 @@
  */
 
 import { CHART_FALL, CHART_RISE } from "../lib/chart-theme";
+import type { ResearchPeriod } from "../lib/research-preferences";
 
 export interface FundSummary {
   code: string;
@@ -136,6 +137,40 @@ export interface FundStatisticsAudit {
   outliers: ReturnOutlier[];
   volatilityCi: ConfidenceInterval | null;
   notes: string[];
+}
+
+export interface FundOverview {
+  code: string;
+  name: string;
+  period: ResearchPeriod;
+  dataStart: string | null;
+  dataEnd: string | null;
+  sampleCount: number;
+  metricStatus: "available" | "partial" | "insufficient";
+  metrics: {
+    periodReturn: number | null;
+    volatility: number | null;
+    maxDrawdown: number | null;
+    sharpe: number | null;
+  };
+  curve: { date: string; fund: number; benchmark: number | null }[];
+  benchmark: {
+    code: string;
+    name: string;
+    status: "available" | "insufficient" | "unavailable";
+    source: string;
+    periodReturn: number | null;
+    matchedSamples: number;
+    fundOnlyDates: number;
+    benchmarkOnlyDates: number;
+    note: string;
+  };
+  qualityStatus: "normal" | "warning" | "stale" | "missing";
+  qualityNotes: string[];
+  duplicateDates: number;
+  invalidNavRecords: number;
+  source: string;
+  generatedAt: string;
 }
 
 export interface MarketIndex {
@@ -430,6 +465,17 @@ export async function getAllFunds(query?: string): Promise<FundSummary[]> {
     ? `/api/funds?q=${encodeURIComponent(query.trim())}&limit=1000`
     : "/api/funds";
   return fetchJson<FundSummary[]>(path);
+}
+
+export async function getFundOverview(
+  code: string,
+  period: ResearchPeriod
+): Promise<FundOverview> {
+  return fetchJson<FundOverview>(
+    `/api/analysis/overview/${encodeURIComponent(code.trim().toUpperCase())}?period=${encodeURIComponent(period)}`,
+    undefined,
+    MARKET_TIMEOUT_MS
+  );
 }
 
 export async function getFundDetail(code: string): Promise<FundDetail> {

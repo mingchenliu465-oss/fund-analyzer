@@ -1,5 +1,5 @@
-import MarketDiscovery from "@/components/market-discovery";
+import OverviewDashboard from "@/components/overview-dashboard";
 
 export default function HomePage() {
-  return <MarketDiscovery />;
+  return <OverviewDashboard />;
 }

@@ -4,13 +4,15 @@ from models.analysis import (
     AICommentary,
     FundStatisticsAudit,
     FundFlow,
+    FundOverview,
     HoldStructure,
     PeerComparison,
     PortfolioOverview,
+    ResearchPeriod,
     ReturnRanking,
 )
 from models.market import DrawdownPoint, NavPeriod
-from services import analysis_service, fund_service
+from services import analysis_service, fund_service, overview_service
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
 
@@ -31,6 +33,13 @@ def ai_commentary(code: str):
 def fund_drawdown(code: str, period: NavPeriod = NavPeriod.ONE_YEAR):
     _ensure_exists(code)
     return analysis_service.drawdown(code, period)
+
+
+@router.get("/overview/{code}", response_model=FundOverview)
+def fund_overview(code: str, period: ResearchPeriod = ResearchPeriod.ONE_YEAR):
+    """区间研究概览；指标与曲线均以真实累计净值为准。"""
+    _ensure_exists(code)
+    return overview_service.overview(code, period)
 
 
 @router.get("/statistics/{code}", response_model=FundStatisticsAudit)

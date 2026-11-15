@@ -27,7 +27,7 @@ import { useEffect, useRef, useState } from "react";
 import { useFundSearch } from "@/hooks/use-fund-search";
 
 const navGroups = [
-  { label: "工作台", items: [{ href: "/", label: "首页", icon: Home }] },
+  { label: "工作台", items: [{ href: "/", label: "研究概览", icon: Home }] },
   {
     label: "市场",
     items: [
