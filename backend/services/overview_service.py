@@ -28,7 +28,7 @@ FUND_SOURCE = "东方财富基金历史净值（经 akshare 获取）"
 BENCHMARK_SOURCE = "指数历史行情（经 akshare 获取）"
 
 
-def _clean_nav(raw: pd.DataFrame) -> tuple[pd.DataFrame, int, int]:
+def clean_nav(raw: pd.DataFrame) -> tuple[pd.DataFrame, int, int]:
     """清洗研究用累计净值；拒绝单位净值或 ETF 市价替代。"""
     if raw is None or raw.empty or "累计净值" not in raw.columns:
         return pd.DataFrame(columns=["净值日期", "累计净值"]), 0, 0
@@ -71,7 +71,7 @@ def overview(code: str, period: ResearchPeriod, as_of: date | None = None) -> di
     code = code.strip().upper()
     today = as_of or datetime.now().date()
     raw = fund_service.nav_history(code)
-    cleaned, duplicate_dates, invalid_records = _clean_nav(raw)
+    cleaned, duplicate_dates, invalid_records = clean_nav(raw)
 
     cutoff = None
     if period != ResearchPeriod.ALL:

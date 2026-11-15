@@ -3,8 +3,11 @@ from fastapi import APIRouter, HTTPException
 from models.analysis import (
     AICommentary,
     FundStatisticsAudit,
+    FundDataAudit,
     FundFlow,
     FundOverview,
+    FundPerformance,
+    FundRisk,
     HoldStructure,
     PeerComparison,
     PortfolioOverview,
@@ -12,7 +15,7 @@ from models.analysis import (
     ReturnRanking,
 )
 from models.market import DrawdownPoint, NavPeriod
-from services import analysis_service, fund_service, overview_service
+from services import analysis_service, fund_service, overview_service, research_service
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
 
@@ -40,6 +43,24 @@ def fund_overview(code: str, period: ResearchPeriod = ResearchPeriod.ONE_YEAR):
     """区间研究概览；指标与曲线均以真实累计净值为准。"""
     _ensure_exists(code)
     return overview_service.overview(code, period)
+
+
+@router.get("/performance/{code}", response_model=FundPerformance)
+def fund_performance(code: str, period: ResearchPeriod = ResearchPeriod.ONE_YEAR):
+    _ensure_exists(code)
+    return research_service.performance(code, period)
+
+
+@router.get("/risk/{code}", response_model=FundRisk)
+def fund_risk(code: str, period: ResearchPeriod = ResearchPeriod.ONE_YEAR):
+    _ensure_exists(code)
+    return research_service.risk(code, period)
+
+
+@router.get("/audit/{code}", response_model=FundDataAudit)
+def fund_data_audit(code: str, period: ResearchPeriod = ResearchPeriod.ONE_YEAR):
+    _ensure_exists(code)
+    return research_service.data_audit(code, period)
 
 
 @router.get("/statistics/{code}", response_model=FundStatisticsAudit)

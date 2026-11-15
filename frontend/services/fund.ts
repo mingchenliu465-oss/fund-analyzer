@@ -139,6 +139,12 @@ export interface FundStatisticsAudit {
   notes: string[];
 }
 
+export interface NormalizedCurvePoint {
+  date: string;
+  fund: number;
+  benchmark: number | null;
+}
+
 export interface FundOverview {
   code: string;
   name: string;
@@ -153,7 +159,7 @@ export interface FundOverview {
     maxDrawdown: number | null;
     sharpe: number | null;
   };
-  curve: { date: string; fund: number; benchmark: number | null }[];
+  curve: NormalizedCurvePoint[];
   benchmark: {
     code: string;
     name: string;
@@ -171,6 +177,114 @@ export interface FundOverview {
   invalidNavRecords: number;
   source: string;
   generatedAt: string;
+}
+
+export interface CalendarReturn {
+  label: string;
+  return: number | null;
+  startDate: string;
+  endDate: string;
+  observations: number;
+  isPartial: boolean;
+}
+
+export interface FundPerformance {
+  code: string;
+  name: string;
+  period: ResearchPeriod;
+  metricStatus: string;
+  metrics: {
+    periodReturn: number | null;
+    annualizedReturn: number | null;
+    benchmarkReturn: number | null;
+    excessReturn: number | null;
+  };
+  curve: NormalizedCurvePoint[];
+  annualReturns: CalendarReturn[];
+  monthlyReturns: CalendarReturn[];
+  periodComparisons: {
+    period: ResearchPeriod;
+    status: string;
+    sampleCount: number;
+    fundReturn: number | null;
+    annualizedReturn: number | null;
+    benchmarkReturn: number | null;
+    excessReturn: number | null;
+  }[];
+  coverage: {
+    dataStart: string | null;
+    dataEnd: string | null;
+    sampleCount: number;
+    matchedSamples: number;
+    qualityStatus: string;
+  };
+  source: string;
+  benchmarkSource: string;
+  generatedAt: string;
+  definitions: string[];
+}
+
+export interface RiskMetricValues {
+  volatility: number | null;
+  maxDrawdown: number | null;
+  sharpe: number | null;
+  downsideDeviation: number | null;
+}
+
+export interface FundRisk {
+  code: string;
+  name: string;
+  period: ResearchPeriod;
+  metricStatus: string;
+  metrics: RiskMetricValues;
+  benchmarkMetrics: RiskMetricValues;
+  drawdown: {
+    peakDate: string | null;
+    troughDate: string | null;
+    recoveryDate: string | null;
+    drawdownDays: number | null;
+    recoveryDays: number | null;
+    underwaterDays: number | null;
+    recoveryStatus: "recovered" | "unrecovered" | "no_drawdown" | "unavailable";
+  };
+  drawdownCurve: { date: string; fund: number; benchmark: number | null }[];
+  periodComparisons: (RiskMetricValues & {
+    period: ResearchPeriod;
+    status: string;
+    sampleCount: number;
+  })[];
+  dataStart: string | null;
+  dataEnd: string | null;
+  sampleCount: number;
+  source: string;
+  benchmarkSource: string;
+  generatedAt: string;
+  definitions: string[];
+}
+
+export type AuditStatus = "normal" | "warning" | "abnormal" | "missing" | "unverified";
+
+export interface FundDataAudit {
+  code: string;
+  period: ResearchPeriod;
+  overallStatus: AuditStatus;
+  dataStart: string | null;
+  dataEnd: string | null;
+  recordCount: number;
+  source: string;
+  generatedAt: string;
+  checks: { key: string; label: string; status: AuditStatus; detail: string }[];
+  missingDates: string[];
+  coverageRatio: number | null;
+  extremeMoves: { date: string; return: number; note: string }[];
+  distributionCandidates: {
+    date: string;
+    unitChange: number;
+    cumulativeChange: number;
+    difference: number;
+    status: "unverified";
+  }[];
+  notes: string[];
 }
 
 export interface MarketIndex {
@@ -478,6 +592,36 @@ export async function getFundOverview(
   );
 }
 
+export async function getFundPerformance(
+  code: string,
+  period: ResearchPeriod
+): Promise<FundPerformance> {
+  return fetchJson<FundPerformance>(
+    `/api/analysis/performance/${encodeURIComponent(code.trim().toUpperCase())}?period=${encodeURIComponent(period)}`,
+    undefined,
+    MARKET_TIMEOUT_MS
+  );
+}
+
+export async function getFundRisk(code: string, period: ResearchPeriod): Promise<FundRisk> {
+  return fetchJson<FundRisk>(
+    `/api/analysis/risk/${encodeURIComponent(code.trim().toUpperCase())}?period=${encodeURIComponent(period)}`,
+    undefined,
+    MARKET_TIMEOUT_MS
+  );
+}
+
+export async function getFundDataAudit(
+  code: string,
+  period: ResearchPeriod
+): Promise<FundDataAudit> {
+  return fetchJson<FundDataAudit>(
+    `/api/analysis/audit/${encodeURIComponent(code.trim().toUpperCase())}?period=${encodeURIComponent(period)}`,
+    undefined,
+    MARKET_TIMEOUT_MS
+  );
+}
+
 export async function getFundDetail(code: string): Promise<FundDetail> {
   const detail = await fetchJson<FundDetail>(
     `/api/funds/${encodeURIComponent(code.trim().toUpperCase())}`,
@@ -642,7 +786,7 @@ const TYPE_COLORS: Record<string, string> = {
   "QDII": "#06b6d4",
 };
 
-function transformPortfolioToOverview(summary: RealPortfolioSummary): PortfolioOverview {
+export function transformPortfolioToOverview(summary: RealPortfolioSummary): PortfolioOverview {
   const holdings = summary.holdings ?? [];
 
   // 按基金类型汇总持仓市值，生成仓位分配
@@ -654,9 +798,11 @@ function transformPortfolioToOverview(summary: RealPortfolioSummary): PortfolioO
 
   const totalValue = summary.total_value;
   const allocation: PortfolioOverview["allocation"] = [];
+  // 任一持仓市值缺失时，比例分母与分类分子都不完整；不能把缺失项当 0 后生成 100% 配置。
+  const valuationComplete = holdings.every((holding) => holding.current_value != null);
 
   for (const [category, value] of Object.entries(typeValues)) {
-    if (value > 0 && totalValue != null && totalValue > 0) {
+    if (valuationComplete && value > 0 && totalValue != null && totalValue > 0) {
       allocation.push({
         category,
         weight: Math.round((value / totalValue) * 100),

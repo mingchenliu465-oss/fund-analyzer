@@ -226,6 +226,7 @@ select:focus-visible {
 }
 
 .research-section {
+  min-width: 0;
   padding: 26px 0 30px;
   border-top: 1px solid var(--border);
 }
@@ -620,6 +621,10 @@ select:focus-visible {
   gap: 32px;
 }
 
+.overview-evidence-grid > * {
+  min-width: 0;
+}
+
 .overview-evidence-grid .key-value-row {
   align-items: flex-start;
 }
@@ -643,6 +648,74 @@ select:focus-visible {
   color: var(--muted-foreground);
   font-size: 12px;
   line-height: 1.8;
+}
+
+.research-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.research-table-wrap .data-table {
+  min-width: 620px;
+}
+
+.audit-table td {
+  vertical-align: top;
+  line-height: 1.65;
+}
+
+.audit-table td:last-child {
+  min-width: 340px;
+  color: var(--muted-foreground);
+}
+
+.audit-status {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-normal {
+  border-color: color-mix(in oklch, var(--negative) 35%, transparent);
+  color: var(--negative);
+}
+
+.status-warning,
+.status-unverified {
+  border-color: color-mix(in oklch, var(--warning) 45%, transparent);
+  color: var(--warning);
+}
+
+.status-abnormal {
+  border-color: color-mix(in oklch, var(--positive) 40%, transparent);
+  color: var(--positive);
+}
+
+.status-missing {
+  color: var(--missing);
+}
+
+.date-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.date-chip-list span {
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
 }
 
 @media (min-width: 1024px) {

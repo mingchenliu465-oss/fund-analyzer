@@ -174,3 +174,162 @@ class FundOverview(BaseModel):
     invalid_nav_records: int = Field(alias="invalidNavRecords")
     source: str
     generated_at: str = Field(alias="generatedAt")
+
+
+class CalendarReturn(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    label: str
+    return_value: float | None = Field(default=None, alias="return")
+    start_date: str = Field(alias="startDate")
+    end_date: str = Field(alias="endDate")
+    observations: int
+    is_partial: bool = Field(alias="isPartial")
+
+
+class PerformanceMetrics(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    period_return: float | None = Field(default=None, alias="periodReturn")
+    annualized_return: float | None = Field(default=None, alias="annualizedReturn")
+    benchmark_return: float | None = Field(default=None, alias="benchmarkReturn")
+    excess_return: float | None = Field(default=None, alias="excessReturn")
+
+
+class PerformancePeriod(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    period: ResearchPeriod
+    status: str
+    sample_count: int = Field(alias="sampleCount")
+    fund_return: float | None = Field(default=None, alias="fundReturn")
+    annualized_return: float | None = Field(default=None, alias="annualizedReturn")
+    benchmark_return: float | None = Field(default=None, alias="benchmarkReturn")
+    excess_return: float | None = Field(default=None, alias="excessReturn")
+
+
+class DataCoverage(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    data_start: str | None = Field(default=None, alias="dataStart")
+    data_end: str | None = Field(default=None, alias="dataEnd")
+    sample_count: int = Field(alias="sampleCount")
+    matched_samples: int = Field(alias="matchedSamples")
+    quality_status: str = Field(alias="qualityStatus")
+
+
+class FundPerformance(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    code: str
+    name: str
+    period: ResearchPeriod
+    metric_status: str = Field(alias="metricStatus")
+    metrics: PerformanceMetrics
+    curve: list[OverviewCurvePoint]
+    annual_returns: list[CalendarReturn] = Field(alias="annualReturns")
+    monthly_returns: list[CalendarReturn] = Field(alias="monthlyReturns")
+    period_comparisons: list[PerformancePeriod] = Field(alias="periodComparisons")
+    coverage: DataCoverage
+    source: str
+    benchmark_source: str = Field(alias="benchmarkSource")
+    generated_at: str = Field(alias="generatedAt")
+    definitions: list[str]
+
+
+class DrawdownDetails(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    peak_date: str | None = Field(default=None, alias="peakDate")
+    trough_date: str | None = Field(default=None, alias="troughDate")
+    recovery_date: str | None = Field(default=None, alias="recoveryDate")
+    drawdown_days: int | None = Field(default=None, alias="drawdownDays")
+    recovery_days: int | None = Field(default=None, alias="recoveryDays")
+    underwater_days: int | None = Field(default=None, alias="underwaterDays")
+    recovery_status: str = Field(alias="recoveryStatus")
+
+
+class RiskMetrics(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    volatility: float | None = None
+    max_drawdown: float | None = Field(default=None, alias="maxDrawdown")
+    sharpe: float | None = None
+    downside_deviation: float | None = Field(default=None, alias="downsideDeviation")
+
+
+class RiskPeriod(RiskMetrics):
+    model_config = ConfigDict(populate_by_name=True)
+
+    period: ResearchPeriod
+    status: str
+    sample_count: int = Field(alias="sampleCount")
+
+
+class DrawdownCurvePoint(BaseModel):
+    date: str
+    fund: float
+    benchmark: float | None = None
+
+
+class FundRisk(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    code: str
+    name: str
+    period: ResearchPeriod
+    metric_status: str = Field(alias="metricStatus")
+    metrics: RiskMetrics
+    benchmark_metrics: RiskMetrics = Field(alias="benchmarkMetrics")
+    drawdown: DrawdownDetails
+    drawdown_curve: list[DrawdownCurvePoint] = Field(alias="drawdownCurve")
+    period_comparisons: list[RiskPeriod] = Field(alias="periodComparisons")
+    data_start: str | None = Field(default=None, alias="dataStart")
+    data_end: str | None = Field(default=None, alias="dataEnd")
+    sample_count: int = Field(alias="sampleCount")
+    source: str
+    benchmark_source: str = Field(alias="benchmarkSource")
+    generated_at: str = Field(alias="generatedAt")
+    definitions: list[str]
+
+
+class AuditCheck(BaseModel):
+    key: str
+    label: str
+    status: str
+    detail: str
+
+
+class ExtremeMove(BaseModel):
+    date: str
+    return_value: float = Field(alias="return")
+    note: str
+
+
+class DistributionCandidate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    date: str
+    unit_change: float = Field(alias="unitChange")
+    cumulative_change: float = Field(alias="cumulativeChange")
+    difference: float
+    status: str
+
+
+class FundDataAudit(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    code: str
+    period: ResearchPeriod
+    overall_status: str = Field(alias="overallStatus")
+    data_start: str | None = Field(default=None, alias="dataStart")
+    data_end: str | None = Field(default=None, alias="dataEnd")
+    record_count: int = Field(alias="recordCount")
+    source: str
+    generated_at: str = Field(alias="generatedAt")
+    checks: list[AuditCheck]
+    missing_dates: list[str] = Field(alias="missingDates")
+    coverage_ratio: float | None = Field(default=None, alias="coverageRatio")
+    extreme_moves: list[ExtremeMove] = Field(alias="extremeMoves")
+    distribution_candidates: list[DistributionCandidate] = Field(alias="distributionCandidates")
+    notes: list[str]

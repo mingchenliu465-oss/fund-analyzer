@@ -1,21 +1,12 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { ArrowRight, Search } from "lucide-react";
-import {
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ResearchControls } from "@/components/research-controls";
+import { ReturnChart } from "@/components/return-chart";
+import { useResearchSelection } from "@/hooks/use-research-selection";
 import {
   DataState,
   KeyValueList,
@@ -23,25 +14,11 @@ import {
   PageHeader,
   PlainConclusion,
   ResearchSection,
-  SegmentedControl,
   SourceNote,
   toneFor,
 } from "@/components/research-ui";
-import { useFundSearch } from "@/hooks/use-fund-search";
-import { CHART_BENCHMARK, CHART_GRID, CHART_PRIMARY } from "@/lib/chart-theme";
 import { excessReturn, isCurrentOverview, overviewConclusion } from "@/lib/overview";
-import {
-  DEFAULT_RESEARCH_PREFERENCES,
-  readResearchPreferences,
-  RESEARCH_PERIODS,
-  ResearchPeriod,
-} from "@/lib/research-preferences";
 import { formatPercent, formatRatio, getFundOverview } from "@/services/fund";
-
-const PERIOD_OPTIONS = RESEARCH_PERIODS.map((value) => ({
-  value,
-  label: { "1m": "近1月", "3m": "近3月", "6m": "近6月", "1y": "近1年", "3y": "近3年", all: "成立以来" }[value],
-}));
 
 const qualityState = {
   normal: { kind: "success" as const, title: "区间数据通过基础检查" },
@@ -51,24 +28,7 @@ const qualityState = {
 };
 
 export default function OverviewDashboard() {
-  const [code, setCode] = useState(DEFAULT_RESEARCH_PREFERENCES.defaultCode);
-  const [period, setPeriod] = useState<ResearchPeriod>(DEFAULT_RESEARCH_PREFERENCES.defaultPeriod);
-  const [draft, setDraft] = useState(DEFAULT_RESEARCH_PREFERENCES.defaultCode);
-  const [ready, setReady] = useState(false);
-  const [inputError, setInputError] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
-  const { suggestions, isSearching } = useFundSearch(draft, 5);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const preferences = readResearchPreferences();
-      setCode(preferences.defaultCode);
-      setPeriod(preferences.defaultPeriod);
-      setDraft(preferences.defaultCode);
-      setReady(true);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, []);
+  const { code, period, ready, setCode, setPeriod } = useResearchSelection();
 
   const { data, isPending, isFetching, isError, error, refetch } = useQuery({
     queryKey: ["fundOverview", code, period],
@@ -79,23 +39,6 @@ export default function OverviewDashboard() {
   });
   const current = isCurrentOverview(data, code, period) ? data : undefined;
   const loading = !ready || isPending || (isFetching && !current);
-
-  function selectFund(nextCode: string) {
-    setCode(nextCode);
-    setDraft(nextCode);
-    setInputError("");
-    setSearchOpen(false);
-  }
-
-  function submitFund(event: FormEvent) {
-    event.preventDefault();
-    const normalized = draft.trim();
-    if (!/^\d{6}$/.test(normalized)) {
-      setInputError("请输入 6 位基金代码，例如 161725。");
-      return;
-    }
-    selectFund(normalized);
-  }
 
   return (
     <div className="page-container">
@@ -109,44 +52,7 @@ export default function OverviewDashboard() {
         ) : undefined}
       />
 
-      <section className="overview-controls" aria-label="研究对象与区间">
-        <form className="overview-fund-form" onSubmit={submitFund}>
-          <label htmlFor="overview-code">研究基金</label>
-          <div className="overview-search-wrap">
-            <div className="overview-search-field">
-              <Search size={16} aria-hidden="true" />
-              <input
-                id="overview-code"
-                value={draft}
-                inputMode="numeric"
-                autoComplete="off"
-                placeholder="输入 6 位基金代码"
-                aria-describedby={inputError ? "overview-code-error" : undefined}
-                onFocus={() => setSearchOpen(true)}
-                onChange={(event) => {
-                  setDraft(event.target.value);
-                  setSearchOpen(true);
-                  setInputError("");
-                }}
-              />
-            </div>
-            {searchOpen && draft.trim() && (isSearching || suggestions.length > 0) && (
-              <div className="overview-suggestions" role="listbox" aria-label="基金搜索结果">
-                {isSearching && <p>正在搜索真实基金名录…</p>}
-                {suggestions.map((fund) => (
-                  <button type="button" role="option" aria-selected={fund.code === code} key={fund.code} onClick={() => selectFund(fund.code)}>
-                    <span><strong>{fund.name}</strong><small>{fund.code} · {fund.type}</small></span>
-                    <ArrowRight size={15} aria-hidden="true" />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <Button type="submit">切换基金</Button>
-          {inputError && <p className="field-error" id="overview-code-error" role="alert">{inputError}</p>}
-        </form>
-        <SegmentedControl items={PERIOD_OPTIONS} value={period} onChange={setPeriod} label="统计区间" />
-      </section>
+      <ResearchControls code={code} period={period} onCodeChange={setCode} onPeriodChange={setPeriod} />
 
       {loading && <DataState kind="loading" title={`正在读取 ${code} 的真实区间数据`} description="基金指标与参考基准分别获取；不会使用演示数据补位。" />}
       {!loading && isError && (
@@ -182,26 +88,7 @@ export default function OverviewDashboard() {
 
           <ResearchSection title="基金与参考基准" description="两条曲线均在共同首个交易日归一化为 0%。仅使用双方都有真实观测的日期，不前向填充、不插值。">
             {current.curve.length >= 2 ? (
-              <div className="chart-frame" aria-label="基金与沪深300参考基准归一化收益曲线">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={current.curve} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
-                    <CartesianGrid stroke={CHART_GRID} vertical={false} />
-                    <XAxis dataKey="date" minTickGap={36} tickLine={false} axisLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} />
-                    <YAxis domain={["auto", "auto"]} tickFormatter={(value: number) => formatPercent(value - 1).replace("+", "")} tickLine={false} axisLine={false} width={58} tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} />
-                    <Tooltip
-                      labelFormatter={(label) => `日期 ${label}`}
-                      formatter={(value, name) => [
-                        typeof value === "number" ? formatPercent(value - 1) : "—",
-                        name === "fund" ? current.code : "沪深300",
-                      ]}
-                    />
-                    <Legend formatter={(value) => value === "fund" ? current.code : "沪深300（参考）"} />
-                    <ReferenceLine y={1} stroke="var(--border)" />
-                    <Line type="linear" dataKey="fund" stroke={CHART_PRIMARY} strokeWidth={2} dot={false} activeDot={{ r: 3 }} isAnimationActive={false} />
-                    <Line type="linear" dataKey="benchmark" stroke={CHART_BENCHMARK} strokeWidth={1.6} strokeDasharray="5 4" dot={false} activeDot={{ r: 3 }} connectNulls={false} isAnimationActive={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+              <ReturnChart data={current.curve} code={current.code} />
             ) : (
               <DataState kind="missing" title="归一化曲线不可计算" description="至少需要两个有效累计净值观测点。" />
             )}

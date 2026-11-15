@@ -2,6 +2,15 @@ export const RESEARCH_PERIODS = ["1m", "3m", "6m", "1y", "3y", "all"] as const;
 
 export type ResearchPeriod = (typeof RESEARCH_PERIODS)[number];
 
+export const RESEARCH_PERIOD_LABELS: Record<ResearchPeriod, string> = {
+  "1m": "近1月",
+  "3m": "近3月",
+  "6m": "近6月",
+  "1y": "近1年",
+  "3y": "近3年",
+  all: "成立以来",
+};
+
 export type ResearchPreferences = {
   defaultCode: string;
   defaultPeriod: ResearchPeriod;
