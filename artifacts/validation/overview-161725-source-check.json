@@ -1,0 +1,19 @@
+{
+  "code": "161725",
+  "period": "1y",
+  "sampleCount": 241,
+  "benchmark": {
+    "code": "sh000300",
+    "name": "沪深300",
+    "status": "available",
+    "source": "指数历史行情（经 akshare 获取）",
+    "periodReturn": -0.1265,
+    "matchedSamples": 241,
+    "fundOnlyDates": 0,
+    "benchmarkOnlyDates": 0,
+    "note": "沪深300仅作统一参考基准，不代表该基金合同约定的业绩比较基准。 iFinD 未用于本次数据（blocked）：功能开关 IFIND_ENABLED 未启用；当前使用现有行情源。 实际来源：指数历史行情（经 akshare 获取）。按真实日期返回，未插值或前向填充。"
+  },
+  "qualityNotes": [
+    "iFinD 未用于本次数据（blocked）：功能开关 IFIND_ENABLED 未启用；当前使用现有行情源。 实际来源：指数历史行情（经 akshare 获取）。按真实日期返回，未插值或前向填充。"
+  ]
+}

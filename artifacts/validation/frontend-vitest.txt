@@ -1,0 +1,15 @@
+
+> frontend@0.1.0 test
+> vitest run --run
+
+
+ RUN  v3.2.7 /tmp/fund-analyzer-work/frontend
+
+ ✓ services/fund.test.ts (7 tests) 24ms
+ ✓ lib/overview.test.ts (4 tests) 2ms
+
+ Test Files  2 passed (2)
+      Tests  11 passed (11)
+   Start at  20:14:07
+   Duration  440ms (transform 89ms, setup 0ms, collect 103ms, tests 26ms, environment 0ms, prepare 99ms)
+

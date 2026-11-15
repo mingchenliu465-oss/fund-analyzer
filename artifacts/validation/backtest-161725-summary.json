@@ -1,0 +1,126 @@
+{
+  "code": "161725",
+  "name": "招商中证白酒指数(LOF)A",
+  "status": "ok",
+  "data_start": "2015-05-27",
+  "data_end": "2026-11-13",
+  "eval_start": "2016-06-08",
+  "warmup_days": 250,
+  "disclosures": [
+    "收益口径：全程使用累计净值。单位净值在除息日会被扣掉分红，用它计算收益等于把分红误算成亏损。",
+    "参数纪律：只使用产品预设的 3 档阈值 × 2 档持有期 = 6 种组合，从不用本基金数据拟合挑选，6 种结果全部列示。",
+    "样本外：前 250 个交易日为预热段（供回撤窗口取历史高点），不进入任何结论指标；结论只认其后的样本外评估段。",
+    "验证边界：本报告不是滚动样本外或 walk-forward 测试；“样本外”仅指固定产品预设参数在预热后的历史评估段，未针对本基金拟合参数，也未逐期重新训练。",
+    "参数判定规则（结论）：评估段不足 3 年或完成交易不足 3 笔 → 证据不足；样本外总超额 > 0 且跑赢年份过半 → 成立；否则 → 不成立。",
+    "费用-申购费率 0.15%：示例口径：天天基金申购费率全面 1 折后 A 类示例值，可配置；非本基金合同费率。",
+    "费用-赎回费（持有 <7 日）1.50%：法定下限：持有少于 7 日的赎回费不低于 1.5%，依据《公开募集开放式证券投资基金流动性风险管理规定》（证监会公告〔2017〕12 号）第二十三条，且全额计入基金财产。",
+    "费用-赎回费（持有 ≥7 日）0.50%：假设值：数据源未提供本基金合同赎回费率，此值为假设值。",
+    "费用-基准：买入持有基准只在买入时扣一次申购费，期末仍持有、未扣赎回费。",
+    "幸存者偏差：本工具只验证单只存续基金，未使用包含已清盘基金的历史基金池，幸存者偏差未消除；结论不可外推为全市场策略结论。",
+    "成交简化：真实申购赎回存在确认日（T+1）与到账时滞，本回测按决策日当日净值成交，未做 T+1 确认模拟。",
+    "指数说明：主基准为买入并持有同一只基金。指数多为价格口径、不含分红，用作基准会系统性低估基准收益，故不作为主基准。",
+    "历史验证不代表未来表现。本报告只做历史验证，不提供买卖意见。"
+  ],
+  "combos": [
+    {
+      "threshold": 0.1,
+      "hold_months": 6,
+      "total_return": 0.82415,
+      "benchmark_return": 1.465436,
+      "excess_return": -0.641286,
+      "completed_trades": 11,
+      "open_trades": 1,
+      "failed_years": [
+        2017,
+        2019,
+        2020,
+        2022
+      ],
+      "conclusion": "不成立",
+      "conclusion_reason": "样本外总超额收益为 -64.13%，或跑赢年份不足一半（7/11）"
+    },
+    {
+      "threshold": 0.1,
+      "hold_months": 12,
+      "total_return": 1.422883,
+      "benchmark_return": 1.465436,
+      "excess_return": -0.042553,
+      "completed_trades": 7,
+      "open_trades": 1,
+      "failed_years": [
+        2017,
+        2019,
+        2021,
+        2022
+      ],
+      "conclusion": "不成立",
+      "conclusion_reason": "样本外总超额收益为 -4.26%，或跑赢年份不足一半（6/11）"
+    },
+    {
+      "threshold": 0.15,
+      "hold_months": 6,
+      "total_return": 0.652515,
+      "benchmark_return": 1.465436,
+      "excess_return": -0.812921,
+      "completed_trades": 8,
+      "open_trades": 0,
+      "failed_years": [
+        2017,
+        2019,
+        2020
+      ],
+      "conclusion": "不成立",
+      "conclusion_reason": "样本外总超额收益为 -81.29%，或跑赢年份不足一半（8/11）"
+    },
+    {
+      "threshold": 0.15,
+      "hold_months": 12,
+      "total_return": 0.928187,
+      "benchmark_return": 1.465436,
+      "excess_return": -0.537249,
+      "completed_trades": 5,
+      "open_trades": 0,
+      "failed_years": [
+        2017,
+        2019,
+        2020
+      ],
+      "conclusion": "不成立",
+      "conclusion_reason": "样本外总超额收益为 -53.72%，或跑赢年份不足一半（8/11）"
+    },
+    {
+      "threshold": 0.2,
+      "hold_months": 6,
+      "total_return": 0.289935,
+      "benchmark_return": 1.465436,
+      "excess_return": -1.175501,
+      "completed_trades": 1,
+      "open_trades": 0,
+      "failed_years": [
+        2016,
+        2017,
+        2019,
+        2020
+      ],
+      "conclusion": "证据不足",
+      "conclusion_reason": "样本外完成的交易仅 1 笔，不足 3 笔，样本太少"
+    },
+    {
+      "threshold": 0.2,
+      "hold_months": 12,
+      "total_return": 0.394094,
+      "benchmark_return": 1.465436,
+      "excess_return": -1.071342,
+      "completed_trades": 1,
+      "open_trades": 0,
+      "failed_years": [
+        2016,
+        2017,
+        2019,
+        2020
+      ],
+      "conclusion": "证据不足",
+      "conclusion_reason": "样本外完成的交易仅 1 笔，不足 3 笔，样本太少"
+    }
+  ]
+}

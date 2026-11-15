@@ -1,0 +1,272 @@
+[
+  {
+    "route": "/",
+    "status": 200,
+    "title": "研究概览",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "internalError": false
+  },
+  {
+    "route": "/discover",
+    "status": 200,
+    "title": "基金与市场数据",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "internalError": false
+  },
+  {
+    "route": "/fund",
+    "status": 200,
+    "title": "基金列表",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "internalError": false
+  },
+  {
+    "route": "/fund/161725",
+    "status": 200,
+    "title": "",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "internalError": false
+  },
+  {
+    "route": "/compare",
+    "status": 200,
+    "title": "基金对比",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "internalError": false
+  },
+  {
+    "route": "/portfolio",
+    "status": 200,
+    "title": "我的组合",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "internalError": false
+  },
+  {
+    "route": "/insights",
+    "status": 200,
+    "title": "",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "internalError": false
+  },
+  {
+    "route": "/review",
+    "status": 200,
+    "title": "",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "internalError": false
+  },
+  {
+    "route": "/market/sh000300",
+    "status": 200,
+    "title": "沪深300",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "internalError": false
+  },
+  {
+    "route": "/workbench",
+    "status": 200,
+    "title": "分析工作台",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "internalError": false
+  },
+  {
+    "route": "/performance",
+    "status": 200,
+    "title": "表现分析",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "internalError": false
+  },
+  {
+    "route": "/risk",
+    "status": 200,
+    "title": "风险分析",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "internalError": false
+  },
+  {
+    "route": "/data-audit",
+    "status": 200,
+    "title": "数据审计",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "internalError": false
+  },
+  {
+    "route": "/backtest",
+    "status": 200,
+    "title": "诚实回测",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "internalError": false
+  },
+  {
+    "route": "/settings",
+    "status": 200,
+    "title": "偏好设置",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "bodyScrollWidth": 1440,
+    "internalError": false
+  },
+  {
+    "route": "/",
+    "status": 200,
+    "title": "研究概览",
+    "width": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "internalError": false
+  },
+  {
+    "route": "/discover",
+    "status": 200,
+    "title": "基金与市场数据",
+    "width": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "internalError": false
+  },
+  {
+    "route": "/fund",
+    "status": 200,
+    "title": "基金列表",
+    "width": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "internalError": false
+  },
+  {
+    "route": "/fund/161725",
+    "status": 200,
+    "title": "",
+    "width": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "internalError": false
+  },
+  {
+    "route": "/compare",
+    "status": 200,
+    "title": "基金对比",
+    "width": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "internalError": false
+  },
+  {
+    "route": "/portfolio",
+    "status": 200,
+    "title": "我的组合",
+    "width": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "internalError": false
+  },
+  {
+    "route": "/insights",
+    "status": 200,
+    "title": "组合洞察",
+    "width": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "internalError": false
+  },
+  {
+    "route": "/review",
+    "status": 200,
+    "title": "投资复盘",
+    "width": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "internalError": false
+  },
+  {
+    "route": "/market/sh000300",
+    "status": 200,
+    "title": "沪深300",
+    "width": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "internalError": false
+  },
+  {
+    "route": "/workbench",
+    "status": 200,
+    "title": "分析工作台",
+    "width": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "internalError": false
+  },
+  {
+    "route": "/performance",
+    "status": 200,
+    "title": "表现分析",
+    "width": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "internalError": false
+  },
+  {
+    "route": "/risk",
+    "status": 200,
+    "title": "风险分析",
+    "width": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "internalError": false
+  },
+  {
+    "route": "/data-audit",
+    "status": 200,
+    "title": "数据审计",
+    "width": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "internalError": false
+  },
+  {
+    "route": "/backtest",
+    "status": 200,
+    "title": "诚实回测",
+    "width": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "internalError": false
+  },
+  {
+    "route": "/settings",
+    "status": 200,
+    "title": "偏好设置",
+    "width": 390,
+    "scrollWidth": 390,
+    "bodyScrollWidth": 390,
+    "internalError": false
+  }
+]

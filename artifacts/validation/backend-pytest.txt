@@ -1,0 +1,83 @@
+........................................................................ [ 22%]
+..................................................................... [ 43%]
+........................................................................ [ 65%]
+........................................................................ [ 87%]
+..........................................                               [100%]
+=============================== warnings summary ===============================
+../../../home/kimi/.local/lib/python3.12/site-packages/py_mini_racer/py_mini_racer.py:15
+  /home/kimi/.local/lib/python3.12/site-packages/py_mini_racer/py_mini_racer.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+    import pkg_resources
+
+../../../usr/local/lib/python3.12/site-packages/starlette/testclient.py:37
+  /usr/local/lib/python3.12/site-packages/starlette/testclient.py:37: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = typing.Callable[[], typing.ContextManager[anyio.abc.BlockingPortal]]
+
+backend/tests/test_attribution.py::test_group_lots_and_reconcile_contributions
+  /home/kimi/.local/lib/python3.12/site-packages/akshare/fund/fund_em.py:1074: Pandas4Warning: The inplace keyword in DataFrame.reset_index is deprecated and will be removed in a future version (PDEP-8).
+  See https://pandas.pydata.org/docs/dev/whatsnew/v3.1.0.html#deprecation-inplace for more details.
+    temp_df.reset_index(inplace=True, drop=True)
+
+backend/tests/test_no_fabricated_data.py::test_load_fund_list_returns_empty_when_source_fails
+  /home/kimi/.local/lib/python3.12/site-packages/akshare/fund/fund_rank_em.py:82: Pandas4Warning: The inplace keyword in DataFrame.reset_index is deprecated and will be removed in a future version (PDEP-8).
+  See https://pandas.pydata.org/docs/dev/whatsnew/v3.1.0.html#deprecation-inplace for more details.
+    temp_df.reset_index(inplace=True)
+
+backend/tests/test_risk_metrics.py::test_commentary_does_not_use_risk_score
+  /home/kimi/.local/lib/python3.12/site-packages/akshare/fund/fund_portfolio_em.py:255: Pandas4Warning: The inplace keyword in DataFrame.reset_index is deprecated and will be removed in a future version (PDEP-8).
+  See https://pandas.pydata.org/docs/dev/whatsnew/v3.1.0.html#deprecation-inplace for more details.
+    temp_df.reset_index(inplace=True)
+
+backend/tests/test_risk_metrics.py::test_commentary_does_not_use_risk_score
+  /home/kimi/.local/lib/python3.12/site-packages/akshare/fund/fund_xq.py:34: Pandas4Warning: The inplace keyword in DataFrame.rename is deprecated and will be removed in a future version (PDEP-8).
+  See https://pandas.pydata.org/docs/dev/whatsnew/v3.1.0.html#deprecation-inplace for more details.
+    temp_df.rename(
+
+backend/tests/test_risk_metrics.py::test_commentary_does_not_use_risk_score
+backend/tests/test_risk_metrics.py::test_commentary_does_not_use_risk_score
+backend/tests/test_risk_metrics.py::test_commentary_does_not_use_risk_score
+  /home/kimi/.local/lib/python3.12/site-packages/akshare/fund/fund_portfolio_em.py:123: Pandas4Warning: The inplace keyword in DataFrame.rename is deprecated and will be removed in a future version (PDEP-8).
+  See https://pandas.pydata.org/docs/dev/whatsnew/v3.1.0.html#deprecation-inplace for more details.
+    temp_df.rename(columns={"占净值 比例": "占净值比例"}, inplace=True)
+
+backend/tests/test_risk_metrics.py::test_commentary_does_not_use_risk_score
+backend/tests/test_risk_metrics.py::test_commentary_does_not_use_risk_score
+backend/tests/test_risk_metrics.py::test_commentary_does_not_use_risk_score
+  /home/kimi/.local/lib/python3.12/site-packages/akshare/fund/fund_portfolio_em.py:127: Pandas4Warning: The inplace keyword in DataFrame.rename is deprecated and will be removed in a future version (PDEP-8).
+  See https://pandas.pydata.org/docs/dev/whatsnew/v3.1.0.html#deprecation-inplace for more details.
+    temp_df.rename(
+
+backend/tests/test_risk_metrics.py::test_commentary_does_not_use_risk_score
+backend/tests/test_risk_metrics.py::test_commentary_does_not_use_risk_score
+backend/tests/test_risk_metrics.py::test_commentary_does_not_use_risk_score
+  /home/kimi/.local/lib/python3.12/site-packages/akshare/fund/fund_portfolio_em.py:131: Pandas4Warning: The inplace keyword in DataFrame.rename is deprecated and will be removed in a future version (PDEP-8).
+  See https://pandas.pydata.org/docs/dev/whatsnew/v3.1.0.html#deprecation-inplace for more details.
+    temp_df.rename(
+
+backend/tests/test_risk_metrics.py::test_commentary_does_not_use_risk_score
+backend/tests/test_risk_metrics.py::test_commentary_does_not_use_risk_score
+backend/tests/test_risk_metrics.py::test_commentary_does_not_use_risk_score
+  /home/kimi/.local/lib/python3.12/site-packages/akshare/fund/fund_portfolio_em.py:135: Pandas4Warning: The inplace keyword in DataFrame.rename is deprecated and will be removed in a future version (PDEP-8).
+  See https://pandas.pydata.org/docs/dev/whatsnew/v3.1.0.html#deprecation-inplace for more details.
+    temp_df.rename(
+
+backend/tests/test_risk_metrics.py::test_commentary_does_not_use_risk_score
+backend/tests/test_risk_metrics.py::test_commentary_does_not_use_risk_score
+backend/tests/test_risk_metrics.py::test_commentary_does_not_use_risk_score
+  /home/kimi/.local/lib/python3.12/site-packages/akshare/fund/fund_portfolio_em.py:139: Pandas4Warning: The inplace keyword in DataFrame.rename is deprecated and will be removed in a future version (PDEP-8).
+  See https://pandas.pydata.org/docs/dev/whatsnew/v3.1.0.html#deprecation-inplace for more details.
+    temp_df.rename(
+
+backend/tests/test_risk_metrics.py::test_commentary_does_not_use_risk_score
+  /home/kimi/.local/lib/python3.12/site-packages/akshare/fund/fund_portfolio_em.py:160: Pandas4Warning: The inplace keyword in DataFrame.reset_index is deprecated and will be removed in a future version (PDEP-8).
+  See https://pandas.pydata.org/docs/dev/whatsnew/v3.1.0.html#deprecation-inplace for more details.
+    big_df.reset_index(inplace=True, drop=False)
+
+backend/tests/test_risk_metrics.py::test_commentary_does_not_use_risk_score
+  /home/kimi/.local/lib/python3.12/site-packages/akshare/fund/fund_portfolio_em.py:162: Pandas4Warning: The inplace keyword in DataFrame.rename is deprecated and will be removed in a future version (PDEP-8).
+  See https://pandas.pydata.org/docs/dev/whatsnew/v3.1.0.html#deprecation-inplace for more details.
+    big_df.rename(columns={"index": "序号"}, inplace=True)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+327 passed, 23 warnings, 3 subtests passed in 9.54s
+akshare fund_name_em failed: cannot schedule new futures after interpreter shutdown
+Using fund list DISK cache saved at 2026-11-15T20:14:05 (1 funds): live source unavailable
