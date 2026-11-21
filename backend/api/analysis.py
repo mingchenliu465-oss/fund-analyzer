@@ -2,15 +2,19 @@ from fastapi import APIRouter, HTTPException
 
 from models.analysis import (
     AICommentary,
+    FundOverview,
+    FundPerformance,
+    FundRisk,
     FundStatisticsAudit,
     FundFlow,
     HoldStructure,
     PeerComparison,
     PortfolioOverview,
+    ResearchPeriod,
     ReturnRanking,
 )
 from models.market import DrawdownPoint, NavPeriod
-from services import analysis_service, fund_service
+from services import analysis_service, fund_service, overview_service, research_service
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
 
@@ -77,3 +81,24 @@ def _ensure_exists(code: str) -> None:
         )
     if not any(f.code == code for f in funds):
         raise HTTPException(status_code=404, detail=f"Fund {code} not found")
+
+
+@router.get("/overview/{code}", response_model=FundOverview)
+def fund_overview(code: str, period: ResearchPeriod = ResearchPeriod.ONE_YEAR):
+    """区间研究概览；指标与曲线均以真实累计净值为准。"""
+    _ensure_exists(code)
+    return overview_service.overview(code, period)
+
+
+@router.get("/performance/{code}", response_model=FundPerformance)
+def fund_performance(code: str, period: ResearchPeriod = ResearchPeriod.ONE_YEAR):
+    """区间业绩表现、自然年/月收益与多周期对比。"""
+    _ensure_exists(code)
+    return research_service.performance(code, period)
+
+
+@router.get("/risk/{code}", response_model=FundRisk)
+def fund_risk(code: str, period: ResearchPeriod = ResearchPeriod.ONE_YEAR):
+    """区间风险指标、下行偏差与最大回撤细节。"""
+    _ensure_exists(code)
+    return research_service.risk(code, period)

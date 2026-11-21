@@ -1,3 +1,5 @@
+from enum import Enum
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -111,3 +113,181 @@ class HoldStructure(BaseModel):
     """全市场机构/个人持有比例趋势（非单只基金数据）。"""
     points: list[HoldStructurePoint]
     note: str  # 说明这是全市场数据
+
+
+class ResearchPeriod(str, Enum):
+    """研究页独立周期；不向旧 NavPeriod 添加值，避免破坏旧接口。"""
+
+    ONE_MONTH = "1m"
+    THREE_MONTH = "3m"
+    SIX_MONTH = "6m"
+    ONE_YEAR = "1y"
+    THREE_YEAR = "3y"
+    ALL = "all"
+
+
+class OverviewMetrics(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    period_return: float | None = Field(default=None, alias="periodReturn")
+    volatility: float | None = None
+    max_drawdown: float | None = Field(default=None, alias="maxDrawdown")
+    sharpe: float | None = None
+
+
+class OverviewCurvePoint(BaseModel):
+    date: str
+    fund: float
+    benchmark: float | None = None
+
+
+class BenchmarkComparison(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    code: str
+    name: str
+    status: str
+    source: str
+    period_return: float | None = Field(default=None, alias="periodReturn")
+    matched_samples: int = Field(alias="matchedSamples")
+    fund_only_dates: int = Field(alias="fundOnlyDates")
+    benchmark_only_dates: int = Field(alias="benchmarkOnlyDates")
+    note: str
+
+
+class FundOverview(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    code: str
+    name: str
+    period: ResearchPeriod
+    data_start: str | None = Field(default=None, alias="dataStart")
+    data_end: str | None = Field(default=None, alias="dataEnd")
+    sample_count: int = Field(alias="sampleCount")
+    metric_status: str = Field(alias="metricStatus")
+    metrics: OverviewMetrics
+    curve: list[OverviewCurvePoint]
+    benchmark: BenchmarkComparison
+    quality_status: str = Field(alias="qualityStatus")
+    quality_notes: list[str] = Field(alias="qualityNotes")
+    duplicate_dates: int = Field(alias="duplicateDates")
+    invalid_nav_records: int = Field(alias="invalidNavRecords")
+    source: str
+    generated_at: str = Field(alias="generatedAt")
+
+
+class CalendarReturn(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    label: str
+    return_value: float | None = Field(default=None, alias="return")
+    start_date: str = Field(alias="startDate")
+    end_date: str = Field(alias="endDate")
+    observations: int
+    is_partial: bool = Field(alias="isPartial")
+
+
+class PerformanceMetrics(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    period_return: float | None = Field(default=None, alias="periodReturn")
+    annualized_return: float | None = Field(default=None, alias="annualizedReturn")
+    benchmark_return: float | None = Field(default=None, alias="benchmarkReturn")
+    excess_return: float | None = Field(default=None, alias="excessReturn")
+
+
+class PerformancePeriod(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    period: ResearchPeriod
+    status: str
+    sample_count: int = Field(alias="sampleCount")
+    fund_return: float | None = Field(default=None, alias="fundReturn")
+    annualized_return: float | None = Field(default=None, alias="annualizedReturn")
+    benchmark_return: float | None = Field(default=None, alias="benchmarkReturn")
+    excess_return: float | None = Field(default=None, alias="excessReturn")
+
+
+class DataCoverage(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    data_start: str | None = Field(default=None, alias="dataStart")
+    data_end: str | None = Field(default=None, alias="dataEnd")
+    sample_count: int = Field(alias="sampleCount")
+    matched_samples: int = Field(alias="matchedSamples")
+    quality_status: str = Field(alias="qualityStatus")
+
+
+class FundPerformance(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    code: str
+    name: str
+    period: ResearchPeriod
+    metric_status: str = Field(alias="metricStatus")
+    metrics: PerformanceMetrics
+    curve: list[OverviewCurvePoint]
+    annual_returns: list[CalendarReturn] = Field(alias="annualReturns")
+    monthly_returns: list[CalendarReturn] = Field(alias="monthlyReturns")
+    period_comparisons: list[PerformancePeriod] = Field(alias="periodComparisons")
+    coverage: DataCoverage
+    source: str
+    benchmark_source: str = Field(alias="benchmarkSource")
+    generated_at: str = Field(alias="generatedAt")
+    definitions: list[str]
+
+
+class DrawdownDetails(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    peak_date: str | None = Field(default=None, alias="peakDate")
+    trough_date: str | None = Field(default=None, alias="troughDate")
+    recovery_date: str | None = Field(default=None, alias="recoveryDate")
+    drawdown_days: int | None = Field(default=None, alias="drawdownDays")
+    recovery_days: int | None = Field(default=None, alias="recoveryDays")
+    underwater_days: int | None = Field(default=None, alias="underwaterDays")
+    recovery_status: str = Field(alias="recoveryStatus")
+
+
+class RiskMetrics(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    volatility: float | None = None
+    max_drawdown: float | None = Field(default=None, alias="maxDrawdown")
+    sharpe: float | None = None
+    downside_deviation: float | None = Field(default=None, alias="downsideDeviation")
+
+
+class RiskPeriod(RiskMetrics):
+    model_config = ConfigDict(populate_by_name=True)
+
+    period: ResearchPeriod
+    status: str
+    sample_count: int = Field(alias="sampleCount")
+
+
+class DrawdownCurvePoint(BaseModel):
+    date: str
+    fund: float
+    benchmark: float | None = None
+
+
+class FundRisk(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    code: str
+    name: str
+    period: ResearchPeriod
+    metric_status: str = Field(alias="metricStatus")
+    metrics: RiskMetrics
+    benchmark_metrics: RiskMetrics = Field(alias="benchmarkMetrics")
+    drawdown: DrawdownDetails
+    drawdown_curve: list[DrawdownCurvePoint] = Field(alias="drawdownCurve")
+    period_comparisons: list[RiskPeriod] = Field(alias="periodComparisons")
+    data_start: str | None = Field(default=None, alias="dataStart")
+    data_end: str | None = Field(default=None, alias="dataEnd")
+    sample_count: int = Field(alias="sampleCount")
+    source: str
+    benchmark_source: str = Field(alias="benchmarkSource")
+    generated_at: str = Field(alias="generatedAt")
+    definitions: list[str]
