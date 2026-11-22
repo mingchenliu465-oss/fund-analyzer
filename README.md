@@ -17,6 +17,22 @@
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python)
 ![Data](https://img.shields.io/badge/data-akshare-blue)
 
+## 版本状态（v3）
+
+- **当前正式发布版本：v2.0**（2026-10-25），见仓库 Releases。
+- **v3 整合版已完成整合**（分支 `integration/v3-nightly-2026-11-21`）：在 v2 的基础上，把数据质量修复、历史频率、回测实验室和研究能力统一到了一套代码里，后端 396 项测试、前端单元测试、TypeScript、ESLint 和生产构建全部通过。
+- v3 还差三步才正式发布：界面视觉定稿、真实数据联调、合并主干验收。完成并验收后才会打 `v3.0` 标签，在此之前请以 v2.0 为正式版。完整版本登记见 [VERSIONS.md](VERSIONS.md)。
+
+### v3 新增
+
+- **历史频率**（`/history-frequency`）：不预测未来，只统计历史。选一只基金，看过去任意一天买入后，接下来一年赚钱的频率有多高、途中跌超 10% 的频率有多高、跌 5% 后中位要等多少个交易日才回本。所有数字都标明统计口径和样本范围。
+- **回测实验室**（`/backtest`）：诚实回测。规则事先写死（250 日新高回撤 10%/15%/20% 触发买入、持有 6/12 个月），只看样本外结果，扣手续费，和买入持有对比；样本不足三年直接拒绝出结论。结论分三档：成立 / 不成立 / 证据不足。
+- **研究能力**：市场概览、基金研究数据（概览、表现、资金流向、持仓结构等），从研究分支中摘取并入统一代码。
+
+### 关于预测，这个项目立场明确
+
+**只讲历史，不做预测。** 项目内部曾用 22 轮严格样本外实验验证过概率预测（预测未来涨跌与回撤的概率），结论是：只靠基金自身的净值历史，算不出可信的概率——深跌之后是“还要跌”还是“跌透了”，在纯价格数据上无法稳定区分。因此预测数字不进入任何页面，产品只呈现可核查的历史统计。实验代码保留在本地实验分支，仅作离线研究。
+
 ## 你可以用它做什么
 
 ### 看懂一只基金
@@ -50,6 +66,8 @@
 | 首页 | `/` | 市场状态、热门基金和最近浏览 |
 | 基金分析 | `/fund` | 搜索基金并进入详情 |
 | 基金详情 | `/fund/{基金代码}` | 业绩、风险、走势、持仓和行业 |
+| 历史频率 | `/history-frequency` | 历史买入起点的一年期频率统计（v3 新增） |
+| 回测实验室 | `/backtest` | 诚实回测：固定规则、样本外验证（v3 新增） |
 | 我的组合 | `/portfolio` | 录入交易、查看持仓和今日收益 |
 | 组合洞察 | `/insights` | 收益、风险、集中度和市场比较 |
 | 基金对比 | `/compare` | 多只基金横向比较 |
@@ -94,8 +112,8 @@ cd backend
 ..\.venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-后端地址：`http://localhost:8000`<br>
-健康检查：`http://localhost:8000/health`<br>
+后端地址：`http://localhost:8000`
+健康检查：`http://localhost:8000/health`
 API 前缀：`/api`
 
 ### 3. 安装并启动前端
@@ -135,6 +153,8 @@ npm run start
 | GET | `/api/analysis/drawdown/{code}?period=...` | 历史回撤 |
 | GET | `/api/analysis/peers/{code}` | 同类比较 |
 | GET | `/api/analysis/ranking/{code}` | 收益排名 |
+| GET | `/api/history-frequency/{code}` | 历史频率统计（v3 新增） |
+| GET | `/api/backtest/{code}` | 诚实回测（v3 新增） |
 | GET | `/api/portfolio` | 组合概览 |
 | GET | `/api/portfolio/attribution` | 今日收益归因 |
 | GET | `/api/portfolio/insights?period=...` | 组合洞察 |
@@ -166,7 +186,7 @@ npm.cmd exec tsc -- --noEmit
 npm.cmd run build
 ```
 
-当前版本已通过完整后端测试、TypeScript 检查、ESLint 和 Next.js 生产构建。
+v3 整合分支已通过完整后端测试（396 项）、前端单元测试、TypeScript 检查、ESLint 和 Next.js 生产构建；正式主干（v2 基线 + 数据质量修复）后端测试 357 项全过。
 
 ## 重要说明
 
@@ -182,6 +202,14 @@ npm.cmd run build
 - 前端：Next.js 16、React 19、TypeScript、Tailwind CSS、React Query、Recharts、Lightweight Charts
 - 后端：FastAPI、Pydantic、Pandas、NumPy、SQLite
 - 数据：akshare
+
+## 版本历史
+
+| 版本 | 时间 | 说明 |
+|---|---|---|
+| v1.0 | 2026-08 | 最早的历史版本快照（见 Releases） |
+| v2.0 | 2026-10-25 | 正式产品基线：诚实回测引擎、组合与复盘（见 Releases） |
+| v3 | 整合完成，待发布 | 数据质量修复 + 历史频率 + 回测实验室 + 研究能力统一整合 |
 
 ## License
 
